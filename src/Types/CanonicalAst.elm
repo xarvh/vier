@@ -249,11 +249,36 @@ findValue name mod =
 
 
 ----
+--- Pos getters
+--
+
+
+typePos : Type -> Pos
+typePos ty =
+    case ty of
+        TypeConstant p _ _ ->
+            p
+
+        TypeVariable p _ ->
+            p
+
+        TypeFunction p _ _ _ ->
+            p
+
+        TypeRecord p _ _ ->
+            p
+
+        TypeAlias p _ _ ->
+            p
+
+
+
+----
 --- Crawler
 --
 {-
-  TODO rename extensionFold_* to posFold_*
-  TODO have two separate set of functions, one for removing the Pos and the other for building an accumulator.
+   TODO rename extensionFold_* to posFold_*
+   TODO have two separate set of functions, one for removing the Pos and the other for building an accumulator.
 -}
 
 

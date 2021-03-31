@@ -80,7 +80,7 @@ intToName n =
 
 nameToTyVar : Name -> Type
 nameToTyVar name =
-    CA.TypeVariable infPos name 
+    CA.TypeVariable infPos name
 
 
 
@@ -378,7 +378,8 @@ unify at1 at2 s =
     case ( t1_refined, t2_refined ) of
         ( CA.TypeConstant _ c1_ref c1_args, CA.TypeConstant _ c2_ref c2_args ) ->
             if c1_ref /= c2_ref then
-                TyGen.wrap <| errorTodo <| "cannot unify " ++ c1_ref ++ " and " ++ c2_ref
+                errorCannotUnify t1_refined t2_refined
+                    |> TyGen.wrap
 
             else
                 let
@@ -436,7 +437,8 @@ unify at1 at2 s =
             unifyRecords ( a_ext, a_attrs ) ( b_ext, b_attrs ) s
 
         _ ->
-            TyGen.wrap <| errorTodo <| "cannot unify " ++ Debug.toString t1_refined ++ " and " ++ Debug.toString t2_refined
+          errorCannotUnify t1_refined t2_refined
+            |> TyGen.wrap
 
 
 type alias UnifyRecordsFold =
@@ -1344,4 +1346,24 @@ errorUnboundVariable pos s =
         pos.n
         [ Error.showLines pos.c 2 pos.s
         , Error.text <| "unbound variable: " ++ s
+        ]
+
+
+errorCannotUnify : CA.Type -> CA.Type -> Res a
+errorCannotUnify a b =
+    let
+        aPos =
+            CA.typePos a
+
+        bPos =
+            CA.typePos b
+    in
+    Error.makeRes
+        aPos.n
+        [ Error.showLines aPos.c 2 aPos.s
+        , Error.text "\n\n"
+        , Error.showLines bPos.c 2 bPos.s
+        , Error.text <| "Cannot unify:"
+        , Error.text <| Debug.toString a
+        , Error.text <| Debug.toString b
         ]
