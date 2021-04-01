@@ -252,6 +252,8 @@ Cool stuff from Koka https://koka-lang.github.io/koka/doc/kokaspec.html#why-perc
 
 https://vale.dev/blog/generational-references
 
+https://www.reddit.com/r/ProgrammingLanguages/comments/mh1l45/garbage_collection_in_languages_with_immutable/
+
 
 ###
 

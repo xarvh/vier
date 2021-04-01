@@ -44,8 +44,8 @@ type alias EnvEntry =
     }
 
 
-infPos : CA.Pos
-infPos =
+todoPos : CA.Pos
+todoPos =
     { n = "ti"
     , c = ""
     , s = -1
@@ -69,18 +69,9 @@ dict_get caller k d =
             v
 
 
-posToVarType =
-    CA.posToUid >> nameToTyVar
-
-
-intToName : Int -> Name
-intToName n =
-    String.fromInt n
-
-
-nameToTyVar : Name -> Type
-nameToTyVar name =
-    CA.TypeVariable infPos name
+posToVarType : CA.Pos -> Type
+posToVarType pos =
+    CA.TypeVariable pos (CA.posToUid pos)
 
 
 
@@ -99,12 +90,12 @@ type alias TR a =
 
 newName : TyGen Name
 newName =
-    TyGen.next ((+) 1) intToName
+    TyGen.next ((+) 1) String.fromInt
 
 
-newType : TyGen Type
-newType =
-    TyGen.map nameToTyVar newName
+newType : CA.Pos -> TyGen Type
+newType pos =
+    TyGen.map (CA.TypeVariable pos) newName
 
 
 do_nr : TR a -> (a -> TR b) -> TR b
@@ -199,13 +190,13 @@ addConstructor : CA.UnionDef -> String -> List CA.Type -> Env -> Res Env
 addConstructor unionDef ctorName ctorArgs env =
     let
         args =
-            List.map (\name -> CA.TypeVariable infPos name) unionDef.args
+            List.map (\name -> CA.TypeVariable todoPos name) unionDef.args
 
         ctorType =
-            List.foldr fold (CA.TypeConstant infPos unionDef.name args) ctorArgs
+            List.foldr fold (CA.TypeConstant todoPos unionDef.name args) ctorArgs
 
         fold ty accum =
-            CA.TypeFunction infPos ty (Just False) accum
+            CA.TypeFunction todoPos ty (Just False) accum
     in
     case validateType False ctorType of
         Just err ->
@@ -311,7 +302,7 @@ instantiateType t tvars =
         -- substitute each tvar with a newly generated tvar
         substituteTvar : Name -> TyGen Substitutions -> TyGen Substitutions
         substituteTvar tvar genSubs =
-            TyGen.do newType <| \nt ->
+            TyGen.do (newType todoPos) <| \nt ->
             TyGen.do genSubs <| \subs ->
             Dict.insert tvar nt subs
                 |> TyGen.wrap
@@ -437,8 +428,8 @@ unify at1 at2 s =
             unifyRecords ( a_ext, a_attrs ) ( b_ext, b_attrs ) s
 
         _ ->
-          errorCannotUnify t1_refined t2_refined
-            |> TyGen.wrap
+            errorCannotUnify t1_refined t2_refined
+                |> TyGen.wrap
 
 
 type alias UnifyRecordsFold =
@@ -503,7 +494,7 @@ unifyRecords ( a_ext, a_attrs ) ( b_ext, b_attrs ) subs0 =
 
                 else
                     -- substitute a with b
-                    Dict.insert aName (CA.TypeRecord infPos b_ext b_attrs) subs1
+                    Dict.insert aName (CA.TypeRecord todoPos b_ext b_attrs) subs1
                         |> Ok
                         |> TyGen.wrap
 
@@ -515,7 +506,7 @@ unifyRecords ( a_ext, a_attrs ) ( b_ext, b_attrs ) subs0 =
 
                 else
                     -- substitute b with a
-                    Dict.insert bName (CA.TypeRecord infPos a_ext a_attrs) subs1
+                    Dict.insert bName (CA.TypeRecord todoPos a_ext a_attrs) subs1
                         |> Ok
                         |> TyGen.wrap
 
@@ -535,7 +526,7 @@ unifyRecords ( a_ext, a_attrs ) ( b_ext, b_attrs ) subs0 =
                 TyGen.do newName <| \new ->
                 let
                     subTy =
-                        CA.TypeRecord infPos (Just new) (Dict.union bOnly a_attrs)
+                        CA.TypeRecord todoPos (Just new) (Dict.union bOnly a_attrs)
                 in
                 subs1
                     |> Dict.insert aName subTy
@@ -598,11 +589,11 @@ unifyWithAttrPath attrPath typeAtPathEnd valueType subs =
 
         head :: tail ->
             TyGen.do newName <| \n1 ->
-            TyGen.do newType <| \t1 ->
+            TyGen.do (newType todoPos) <| \t1 ->
             let
                 -- `rType` : { n1 | `head` : t1 }
                 rType =
-                    CA.TypeRecord infPos (Just n1) (Dict.singleton head t1)
+                    CA.TypeRecord todoPos (Just n1) (Dict.singleton head t1)
             in
             do_nr (unify rType valueType subs) <| \subs1 ->
             unifyWithAttrPath tail typeAtPathEnd t1 subs1
@@ -630,7 +621,7 @@ inspectExpr expr ty ( env, subs ) =
                 |> andEnv env
 
         CA.Lambda pos parameter body ->
-            TyGen.do newType <| \argTy ->
+            TyGen.do (newType pos) <| \argTy ->
             do_nr (inspectPattern insertVariableFromLambda parameter argTy ( env, subs )) <| \( env1, subs1 ) ->
             do_nr (inspectBlock body env1 subs1) <| \( returnType, env2, subs2 ) ->
             let
@@ -654,9 +645,9 @@ inspectExpr expr ty ( env, subs ) =
                 |> unify lambdaTy returnType
                 |> andEnv env
 
-        CA.Call _ reference argument ->
-            TyGen.do newType <| \e_t ->
-            do_nr (inspectArgument env argument e_t subs) <| \( env1, subs1 ) ->
+        CA.Call pos reference argument ->
+            TyGen.do (newType pos) <| \argumentTy ->
+            do_nr (inspectArgument env argument argumentTy subs) <| \( env1, subs1 ) ->
             let
                 fromIsMutable =
                     case argument of
@@ -666,13 +657,10 @@ inspectExpr expr ty ( env, subs ) =
                         CA.ArgumentExpression _ ->
                             False
 
-                f_t =
-                    CA.TypeFunction infPos e_t (Just fromIsMutable) ty
-
-                f_t1 =
-                    refineType subs1 f_t
+                funTy =
+                    CA.TypeFunction pos argumentTy (Just fromIsMutable) ty
             in
-            inspectExpr reference f_t1 ( refineEnv subs1 env1, subs1 )
+            inspectExpr reference (refineType subs1 funTy) ( refineEnv subs1 env1, subs1 )
 
         CA.Record pos extends attrs ->
             do_nr (inspectRecordAttributes inspectExpr attrs ( env, subs )) <| \( attrTypes, ( env1, subs1 ) ) ->
@@ -704,7 +692,7 @@ inspectExpr expr ty ( env, subs ) =
                 rawPatternTy =
                     posToVarType pos
             in
-            TyGen.do newType <| \blockType ->
+            TyGen.do (newType pos) <| \blockType ->
             do_nr (inspectExpr value rawPatternTy ( env, subs )) <| \( env1, subs1 ) ->
             let
                 refPatternTy =
@@ -752,7 +740,7 @@ inspectRecordAttributes inspectValue attrs eas =
             -> TR ( Dict Name Type, Eas )
         foldAttr attrName attrValue genResAccum =
             do_nr genResAccum <| \( attrsAccum, easAccum ) ->
-            TyGen.do newType <| \nt ->
+            TyGen.do (newType todoPos) <| \nt ->
             do_nr (inspectValue attrValue nt easAccum) <| \newEas ->
             ( Dict.insert attrName nt attrsAccum, newEas )
                 |> Ok
@@ -770,7 +758,7 @@ inspectMaybeExtensible env maybeUpdateTarget ty subs =
         Just updateTarget ->
             TyGen.do newName <| \n ->
             ( env, subs )
-                |> inspectExpr (CA.Variable infPos updateTarget) ty
+                |> inspectExpr (CA.Variable todoPos updateTarget) ty
                 |> map_nr (\eas -> ( Just n, eas ))
 
 
@@ -813,7 +801,7 @@ inspectStatement : CA.Statement -> Env -> Substitutions -> TR ( Type, Env, Subst
 inspectStatement statement env subs =
     case statement of
         CA.Evaluation expr ->
-            TyGen.do newType <| \nt ->
+            TyGen.do (newType todoPos) <| \nt ->
             do_nr (inspectExpr expr nt ( env, subs )) <| \( env1, subs1 ) ->
             let
                 refinedNt =
@@ -944,8 +932,8 @@ inspectPattern insertVariable pattern ty ( env, subs ) =
 
         CA.PatternRecord attrs ->
             TyGen.do newName <| \nn ->
-            do_nr (dict_fold_nr (\name pa acc -> TyGen.map (\t -> Dict.insert name t acc |> Ok) newType) attrs Dict.empty) <| \xxx ->
-            do_nr (unify ty (CA.TypeRecord infPos (Just nn) xxx) subs) <| \s1 ->
+            do_nr (dict_fold_nr (\name pa acc -> TyGen.map (\t -> Dict.insert name t acc |> Ok) (newType todoPos)) attrs Dict.empty) <| \xxx ->
+            do_nr (unify ty (CA.TypeRecord todoPos (Just nn) xxx) subs) <| \s1 ->
             let
                 init =
                     ( Dict.empty, ( env, s1 ) )
@@ -967,7 +955,7 @@ inspectPattern insertVariable pattern ty ( env, subs ) =
                     Dict.map (\attrName attrType -> refineType subs1 attrType) attrTypes
             in
             subs1
-                |> unify ty (CA.TypeRecord infPos (Just nn) refinedAttrTypes)
+                |> unify ty (CA.TypeRecord todoPos (Just nn) refinedAttrTypes)
                 |> andEnv env1
 
 
@@ -1019,7 +1007,7 @@ annotationTooGeneral annotation inferredForall =
 inspectBlock : List CA.Statement -> Env -> Substitutions -> TR ( Type, Env, Substitutions )
 inspectBlock stats parentEnv subs =
     if stats == [] then
-        TyGen.do newType <| \nt ->
+        TyGen.do (newType todoPos) <| \nt ->
         ( nt, parentEnv, subs )
             |> Ok
             |> TyGen.wrap
@@ -1130,7 +1118,7 @@ insertDefinitionRec def env =
                         TyGen.do newName <| \typeName ->
                         e
                             |> Dict.insert varName
-                                { type_ = CA.TypeVariable infPos typeName
+                                { type_ = CA.TypeVariable todoPos typeName
                                 , forall = Set.singleton typeName
                                 , mutable = Just def.mutable
                                 }
