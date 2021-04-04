@@ -447,7 +447,7 @@ translateDefinition isRoot env fa =
     { pattern = name
     , mutable = fa.mutable
     , maybeAnnotation = maybeAnnotation
-    , body = List.foldr wrapLambda body params
+    , body = List.foldr (wrapLambda env.ro fa.pos) body params
     }
         |> Ok
 
@@ -735,7 +735,7 @@ translateExpression env faExpr =
 
                 caHead :: caTail ->
                     do (translateStatementBlock localEnv faBody) <| \caBody ->
-                    CA.Lambda todoPos caHead (List.foldr wrapLambda caBody caTail)
+                    CA.Lambda (tp env.ro pos) caHead (List.foldr (wrapLambda env.ro pos) caBody caTail)
                         |> Ok
 
         FA.FunctionCall pos reference arguments ->
@@ -1193,10 +1193,10 @@ errorExperimentingWithNoExtensibleTypes ro ( start, end ) =
 --
 
 
-wrapLambda : CA.Pattern -> List CA.Statement -> List CA.Statement
-wrapLambda pattern bodyAccum =
+wrapLambda : ReadOnly -> FA.Pos -> CA.Pattern -> List CA.Statement -> List CA.Statement
+wrapLambda ro pos pattern bodyAccum =
     [ bodyAccum
-        |> CA.Lambda todoPos pattern
+        |> CA.Lambda (tp ro pos) pattern
         |> CA.Evaluation
     ]
 

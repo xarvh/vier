@@ -30,6 +30,9 @@ type alias ValueDef =
     , mutable : Bool
     , maybeAnnotation : Maybe Annotation
     , body : List Statement
+
+    -- TODO move it in the statement constructor?
+    , pos : Pos
     }
 
 
@@ -157,6 +160,7 @@ posMap_statement f stat =
                 , mutable = def.mutable
                 , maybeAnnotation = Maybe.map (\ann -> { ann | ty = posMap_type f ann.ty }) def.maybeAnnotation
                 , body = List.map (posMap_statement f) def.body
+                , pos = f def.pos
                 }
 
         TypeAlias ar ->

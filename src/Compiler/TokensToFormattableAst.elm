@@ -613,14 +613,17 @@ statement =
 -}
 definition : Parser FA.Statement
 definition =
+    do here <| \start ->
     do (maybe typeAnnotation) <| \maybeAnnotation ->
     do pattern <| \p ->
     do defop <| \{ mutable } ->
     do inlineStatementOrBlock <| \sb ->
+    do here <| \end ->
     { pattern = p
     , mutable = mutable
     , body = OneOrMore.toList sb
     , maybeAnnotation = maybeAnnotation
+    , pos = (start, end)
     }
         |> FA.Definition
         |> succeed

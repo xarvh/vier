@@ -8,7 +8,7 @@ import Lib exposing (result_do)
 import RefHierarchy
 import Set exposing (Set)
 import Types.CanonicalAst as CA exposing (Type)
-import Types.Error as Error exposing (Res, errorTodo)
+import Types.Error as Error exposing (ErrorArgs, Res, errorTodo)
 import Types.Literal
 
 
@@ -347,8 +347,14 @@ unwrapAlias prevPath ty =
             ( ty, prevPath )
 
 
-unify : Type -> Type -> Substitutions -> TR Substitutions
-unify at1 at2 s =
+type alias ErrorContext =
+    { why : String
+    , pos : CA.Pos
+    }
+
+
+unify : ErrorContext -> Type -> Type -> Substitutions -> TR Substitutions
+unify ctx at1 at2 s =
     let
         -- TODO use path1,2 in error messages
         ( t1, path1 ) =
@@ -369,8 +375,7 @@ unify at1 at2 s =
     case ( t1_refined, t2_refined ) of
         ( CA.TypeConstant _ c1_ref c1_args, CA.TypeConstant _ c2_ref c2_args ) ->
             if c1_ref /= c2_ref then
-                errorCannotUnify t1_refined t2_refined
-                    |> TyGen.wrap
+                errorCannotUnify ctx t1_refined t2_refined
 
             else
                 let
@@ -380,7 +385,7 @@ unify at1 at2 s =
                                 TyGen.wrap <| Ok subs
 
                             ( head1 :: tail1, head2 :: tail2 ) ->
-                                do_nr (unify head1 head2 subs) <| rec tail1 tail2
+                                do_nr (unify ctx head1 head2 subs) <| rec tail1 tail2
 
                             _ ->
                                 TyGen.wrap <| errorTodo <| "one of the two has wrong number of args: " ++ c1_ref ++ " and " ++ c2_ref
@@ -411,7 +416,7 @@ unify at1 at2 s =
                 )
 
         ( _, CA.TypeVariable _ v2 ) ->
-            unify t2_refined t1_refined s
+            unify ctx t2_refined t1_refined s
 
         ( CA.TypeFunction _ a_from a_fromIsMutable a_to, CA.TypeFunction _ b_from b_fromIsMutable b_to ) ->
             let
@@ -422,14 +427,13 @@ unify at1 at2 s =
                 TyGen.wrap <| errorTodo <| "mutability clash: " ++ Debug.toString t1_refined ++ " and " ++ Debug.toString t2_refined
 
             else
-                do_nr (unify a_to b_to s) <| unify a_from b_from
+                do_nr (unify ctx a_to b_to s) <| unify ctx a_from b_from
 
         ( CA.TypeRecord _ a_ext a_attrs, CA.TypeRecord _ b_ext b_attrs ) ->
-            unifyRecords ( a_ext, a_attrs ) ( b_ext, b_attrs ) s
+            unifyRecords ctx ( a_ext, a_attrs ) ( b_ext, b_attrs ) s
 
         _ ->
-            errorCannotUnify t1_refined t2_refined
-                |> TyGen.wrap
+            errorCannotUnify ctx t1_refined t2_refined
 
 
 type alias UnifyRecordsFold =
@@ -439,8 +443,8 @@ type alias UnifyRecordsFold =
     }
 
 
-unifyRecords : ( Maybe String, Dict String Type ) -> ( Maybe String, Dict String Type ) -> Substitutions -> TR Substitutions
-unifyRecords ( a_ext, a_attrs ) ( b_ext, b_attrs ) subs0 =
+unifyRecords : ErrorContext -> ( Maybe String, Dict String Type ) -> ( Maybe String, Dict String Type ) -> Substitutions -> TR Substitutions
+unifyRecords ctx ( a_ext, a_attrs ) ( b_ext, b_attrs ) subs0 =
     -- TODO if aArg == bArg do nothing
     let
         initState : UnifyRecordsFold
@@ -471,7 +475,7 @@ unifyRecords ( a_ext, a_attrs ) ( b_ext, b_attrs ) subs0 =
                     TyGen.wrap <| Ok subs
 
                 ( name, ( aType, bType ) ) :: tail ->
-                    do_nr (unify aType bType subs) <| \subsN ->
+                    do_nr (unify ctx aType bType subs) <| \subsN ->
                     unifyBothRec subsN tail
 
         tyResSubs1 =
@@ -581,11 +585,11 @@ andEnv env =
     map_nr (\subs -> ( env, subs ))
 
 
-unifyWithAttrPath : List Name -> Type -> Type -> Substitutions -> TR Substitutions
-unifyWithAttrPath attrPath typeAtPathEnd valueType subs =
+unifyWithAttrPath : ErrorContext -> List Name -> Type -> Type -> Substitutions -> TR Substitutions
+unifyWithAttrPath ctx attrPath typeAtPathEnd valueType subs =
     case attrPath of
         [] ->
-            unify typeAtPathEnd valueType subs
+            unify ctx typeAtPathEnd valueType subs
 
         head :: tail ->
             TyGen.do newName <| \n1 ->
@@ -595,16 +599,16 @@ unifyWithAttrPath attrPath typeAtPathEnd valueType subs =
                 rType =
                     CA.TypeRecord todoPos (Just n1) (Dict.singleton head t1)
             in
-            do_nr (unify rType valueType subs) <| \subs1 ->
-            unifyWithAttrPath tail typeAtPathEnd t1 subs1
+            do_nr (unify ctx rType valueType subs) <| \subs1 ->
+            unifyWithAttrPath ctx tail typeAtPathEnd t1 subs1
 
 
 inspectExpr : CA.Expression -> Type -> Eas -> TR Eas
 inspectExpr expr ty ( env, subs ) =
     case expr of
-        CA.Literal _ l ->
+        CA.Literal pos l ->
             subs
-                |> unify ty (literalToType l)
+                |> unify { why = "Literal", pos = pos } ty (literalToType l)
                 |> andEnv env
 
         CA.Variable pos { name, attrPath } ->
@@ -617,7 +621,7 @@ inspectExpr expr ty ( env, subs ) =
                     refineType subs nt
             in
             subs
-                |> unifyWithAttrPath attrPath ty t
+                |> unifyWithAttrPath { why = "variable", pos = pos } attrPath ty t
                 |> andEnv env
 
         CA.Lambda pos parameter body ->
@@ -640,9 +644,9 @@ inspectExpr expr ty ( env, subs ) =
                             errorTodo "unpacking mutable arguments is not supported =("
             in
             do_nr (TyGen.wrap fromIsMutable_res) <| \fromIsMutable ->
-            do_nr (unify ty (CA.TypeFunction pos argTy fromIsMutable lambdaTy) subs2) <| \subs3 ->
+            do_nr (unify { why = "Lambda", pos = pos } ty (CA.TypeFunction pos argTy fromIsMutable lambdaTy) subs2) <| \subs3 ->
             subs3
-                |> unify lambdaTy returnType
+                |> unify { why = "Lambda return", pos = pos } lambdaTy returnType
                 |> andEnv env
 
         CA.Call pos reference argument ->
@@ -671,16 +675,16 @@ inspectExpr expr ty ( env, subs ) =
                     Dict.map (\attrName attrType -> refineType subs2 attrType) attrTypes
             in
             subs2
-                |> unify ty (CA.TypeRecord pos extensible refinedAttrTypes)
+                |> unify { why = "Record", pos = pos } ty (CA.TypeRecord pos extensible refinedAttrTypes)
                 |> andEnv env2
 
-        CA.If _ ar ->
+        CA.If pos ar ->
             do_nr (inspectBlock ar.condition env subs) <| \( conditionType, env1, subs1 ) ->
-            do_nr (unify conditionType Core.boolType subs1) <| \subs2 ->
+            do_nr (unify { why = "if condition", pos = pos } conditionType Core.boolType subs1) <| \subs2 ->
             do_nr (inspectBlock ar.true env1 subs2) <| \( inferredTrue, _, subs3 ) ->
             do_nr (inspectBlock ar.false env1 subs3) <| \( inferredFalse, _, subs4 ) ->
-            do_nr (unify inferredTrue inferredFalse subs4) <| \subs5 ->
-            do_nr (unify (refineType subs5 inferredTrue) ty subs5) <| \subs6 ->
+            do_nr (unify { why = "true and false", pos = pos } inferredTrue inferredFalse subs4) <| \subs5 ->
+            do_nr (unify { why = "if branch", pos = pos } (refineType subs5 inferredTrue) ty subs5) <| \subs6 ->
             ( refineEnv subs6 env1
             , subs6
             )
@@ -702,7 +706,7 @@ inspectExpr expr ty ( env, subs ) =
                     refineEnv subs1 env1
             in
             do_nr (list_foldl_nr (inspectPatternBlock env2) tries ( refPatternTy, blockType, subs1 )) <| \( _, _, subs2 ) ->
-            do_nr (unify blockType ty subs2) <| \subs3 ->
+            do_nr (unify { why = "try", pos = pos } blockType ty subs2) <| \subs3 ->
             ( refineEnv subs3 env2
             , subs3
             )
@@ -714,7 +718,7 @@ inspectPatternBlock : Env -> ( CA.Pattern, List CA.Statement ) -> ( Type, Type, 
 inspectPatternBlock env ( pattern, block ) ( patternType, expectedBlockType, subs ) =
     do_nr (inspectPattern insertVariableFromLambda pattern patternType ( env, subs )) <| \( env1, subs1 ) ->
     do_nr (inspectBlock block env1 subs1) <| \( inferredBlockType, _, subs2 ) ->
-    do_nr (unify expectedBlockType inferredBlockType subs2) <| \subs3 ->
+    do_nr (unify { why = "pa block", pos = todoPos } expectedBlockType inferredBlockType subs2) <| \subs3 ->
     ( refineType subs3 patternType
     , refineType subs3 inferredBlockType
     , subs3
@@ -775,11 +779,11 @@ inspectArgument env arg ty subs =
                 Just schema ->
                     case schema.mutable of
                         Nothing ->
-                            unifyWithAttrPath attrPath ty schema.type_ subs
+                            unifyWithAttrPath { why = "ArgumentMutable", pos = todoPos } attrPath ty schema.type_ subs
                                 |> map_nr (\s -> ( Dict.insert name { schema | mutable = Just True } env, s ))
 
                         Just True ->
-                            unifyWithAttrPath attrPath ty schema.type_ subs
+                            unifyWithAttrPath { why = "ArgumentMutable", pos = todoPos } attrPath ty schema.type_ subs
                                 |> map_nr (\s -> ( env, s ))
 
                         Just False ->
@@ -854,7 +858,7 @@ insertVariableFromDefinition mutable maybeAnnotation name ty ( env, subs ) =
         def =
             dict_get "SNH inspectPattern PatternAny" name env
     in
-    do_nr (unify ty def.type_ subs) <| \subs2 ->
+    do_nr (unify { why = "insertVariableFromDefinition", pos = todoPos } ty def.type_ subs) <| \subs2 ->
     let
         refinedType =
             refineType subs2 def.type_
@@ -911,7 +915,7 @@ inspectPattern insertVariable pattern ty ( env, subs ) =
 
         CA.PatternLiteral literal ->
             subs
-                |> unify ty (literalToType literal)
+                |> unify { why = "pattern literal", pos = todoPos } ty (literalToType literal)
                 |> andEnv env
 
         CA.PatternConstructor path args ->
@@ -923,7 +927,7 @@ inspectPattern insertVariable pattern ty ( env, subs ) =
 
                 Just envEntry ->
                     do_nr (reversedZipConstructorArgs args envEntry.type_ [] |> TyGen.wrap) <| \( patternType, argsAndTypes ) ->
-                    do_nr (unify ty patternType subs) <| \subs1 ->
+                    do_nr (unify { why = "PatternConstructor", pos = todoPos } ty patternType subs) <| \subs1 ->
                     let
                         fold ( argPattern, argType ) eas =
                             inspectPattern insertVariable argPattern argType eas
@@ -933,7 +937,7 @@ inspectPattern insertVariable pattern ty ( env, subs ) =
         CA.PatternRecord attrs ->
             TyGen.do newName <| \nn ->
             do_nr (dict_fold_nr (\name pa acc -> TyGen.map (\t -> Dict.insert name t acc |> Ok) (newType todoPos)) attrs Dict.empty) <| \xxx ->
-            do_nr (unify ty (CA.TypeRecord todoPos (Just nn) xxx) subs) <| \s1 ->
+            do_nr (unify { why = "PatternRecord", pos = todoPos } ty (CA.TypeRecord todoPos (Just nn) xxx) subs) <| \s1 ->
             let
                 init =
                     ( Dict.empty, ( env, s1 ) )
@@ -955,7 +959,7 @@ inspectPattern insertVariable pattern ty ( env, subs ) =
                     Dict.map (\attrName attrType -> refineType subs1 attrType) attrTypes
             in
             subs1
-                |> unify ty (CA.TypeRecord todoPos (Just nn) refinedAttrTypes)
+                |> unify { why = "PatternRecord 2", pos = todoPos } ty (CA.TypeRecord todoPos (Just nn) refinedAttrTypes)
                 |> andEnv env1
 
 
@@ -1337,21 +1341,97 @@ errorUnboundVariable pos s =
         ]
 
 
-errorCannotUnify : CA.Type -> CA.Type -> Res a
-errorCannotUnify a b =
-    let
-        aPos =
-            CA.typePos a
+errorCannotUnify : ErrorContext -> CA.Type -> CA.Type -> TR a
+errorCannotUnify ctx a b =
+    [ Error.text <| "Cannot unify:"
+    , Error.text <| typeToString a
+    , Error.text <| typeToString b
+    , Error.text ctx.why
+    , Error.showLines ctx.pos.c 2 ctx.pos.s
+    ]
+        |> Error.makeRes ctx.pos.n
+        |> TyGen.wrap
 
-        bPos =
-            CA.typePos b
-    in
-    Error.makeRes
-        aPos.n
-        [ Error.showLines aPos.c 2 aPos.s
-        , Error.text "\n\n"
-        , Error.showLines bPos.c 2 bPos.s
-        , Error.text <| "Cannot unify:"
-        , Error.text <| Debug.toString a
-        , Error.text <| Debug.toString b
-        ]
+
+typeToString : CA.Type -> String
+typeToString ty =
+    case ty of
+        CA.TypeConstant pos name args ->
+            name :: List.map typeToString args |> String.join " " |> parens
+
+        CA.TypeVariable pos name ->
+            name
+
+        CA.TypeFunction pos from fromIsMut to ->
+            [ typeToString from
+            , case fromIsMut of
+                Nothing ->
+                    "?>"
+
+                Just True ->
+                    "@>"
+
+                Just False ->
+                    "->"
+            , typeToString to
+            ]
+                |> String.join " "
+                |> parens
+
+        CA.TypeRecord pos extend attrs ->
+            [ "{"
+            , case extend of
+                Nothing ->
+                    ""
+
+                Just n ->
+                    n ++ " with"
+            , "TODO"
+            , "}"
+            ]
+                |> String.join " "
+
+        CA.TypeAlias pos name ty2 ->
+            [ "<"
+            , name
+            , "="
+            , typeToString ty2
+            , ">"
+            ]
+                |> String.join " "
+
+
+parens s =
+    "(" ++ s ++ ")"
+
+
+
+{-
+   --
+
+
+   trMapError : (ErrorArgs -> ErrorArgs) -> TR a -> TR a
+   trMapError =
+       mapErrorArgs >> Result.mapError >> TyGen.map
+
+
+   mapErrorArgs : (ErrorArgs -> ErrorArgs) -> Error.Error -> Error.Error
+   mapErrorArgs f err =
+       case err of
+           Error.Simple args ->
+               Error.Simple (f args)
+
+           Error.Nested ers ->
+               Error.Nested <| List.map (mapErrorArgs f) ers
+
+
+   unifyError : String -> CA.Pos -> ErrorArgs -> ErrorArgs
+   unifyError message pos uError =
+       { file = uError.file
+       , content =
+           [ Error.text message
+           , Error.showLines pos.c 2 pos.s
+           ]
+               ++ uError.content
+       }
+-}
