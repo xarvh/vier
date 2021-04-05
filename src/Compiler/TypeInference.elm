@@ -375,7 +375,7 @@ unify ctx at1 at2 s =
     case ( t1_refined, t2_refined ) of
         ( CA.TypeConstant _ c1_ref c1_args, CA.TypeConstant _ c2_ref c2_args ) ->
             if c1_ref /= c2_ref then
-                errorCannotUnify ctx t1_refined t2_refined
+                errorCannotUnify ctx s t1_refined t2_refined
 
             else
                 let
@@ -433,7 +433,7 @@ unify ctx at1 at2 s =
             unifyRecords ctx ( a_ext, a_attrs ) ( b_ext, b_attrs ) s
 
         _ ->
-            errorCannotUnify ctx t1_refined t2_refined
+            errorCannotUnify ctx s t1_refined t2_refined
 
 
 type alias UnifyRecordsFold =
@@ -634,10 +634,10 @@ inspectExpr expr ty ( env, subs ) =
 
                 fromIsMutable_res =
                     case parameter of
-                        CA.PatternDiscard ->
+                        CA.PatternDiscard _ ->
                             Ok (Just False)
 
-                        CA.PatternAny name ->
+                        CA.PatternAny _ name ->
                             Ok (dict_get "SNH inspectExpr CA.Lambda" name env2).mutable
 
                         _ ->
@@ -905,20 +905,20 @@ insertVariableFromLambda name ty ( env, subs ) =
 inspectPattern : (Name -> Type -> Eas -> TR Eas) -> CA.Pattern -> Type -> Eas -> TR Eas
 inspectPattern insertVariable pattern ty ( env, subs ) =
     case pattern of
-        CA.PatternDiscard ->
+        CA.PatternDiscard _ ->
             ( env, subs )
                 |> Ok
                 |> TyGen.wrap
 
-        CA.PatternAny name ->
+        CA.PatternAny _ name ->
             insertVariable name ty ( env, subs )
 
-        CA.PatternLiteral literal ->
+        CA.PatternLiteral _ literal ->
             subs
                 |> unify { why = "pattern literal", pos = todoPos } ty (literalToType literal)
                 |> andEnv env
 
-        CA.PatternConstructor path args ->
+        CA.PatternConstructor _ path args ->
             case Dict.get path env of
                 Nothing ->
                     ("undeclared constructor: " ++ path)
@@ -934,7 +934,7 @@ inspectPattern insertVariable pattern ty ( env, subs ) =
                     in
                     list_foldl_nr fold argsAndTypes ( env, subs1 )
 
-        CA.PatternRecord attrs ->
+        CA.PatternRecord _ attrs ->
             TyGen.do newName <| \nn ->
             do_nr (dict_fold_nr (\name pa acc -> TyGen.map (\t -> Dict.insert name t acc |> Ok) (newType todoPos)) attrs Dict.empty) <| \xxx ->
             do_nr (unify { why = "PatternRecord", pos = todoPos } ty (CA.TypeRecord todoPos (Just nn) xxx) subs) <| \s1 ->
@@ -1341,13 +1341,14 @@ errorUnboundVariable pos s =
         ]
 
 
-errorCannotUnify : ErrorContext -> CA.Type -> CA.Type -> TR a
-errorCannotUnify ctx a b =
+errorCannotUnify : ErrorContext -> Substitutions -> CA.Type -> CA.Type -> TR a
+errorCannotUnify ctx subs a b =
     [ Error.text <| "Cannot unify:"
     , Error.text <| typeToString a
     , Error.text <| typeToString b
     , Error.text ctx.why
     , Error.showLines ctx.pos.c 2 ctx.pos.s
+--     , Error.codeBlock <| Debug.toString subs
     ]
         |> Error.makeRes ctx.pos.n
         |> TyGen.wrap

@@ -280,6 +280,12 @@ functions =
                             }
                     }
             }
+        , codeTest "[reg] function with multiple arguments are correctly inferred"
+            """
+            a x y z = x + y + z
+            """
+            (infer "a")
+            Test.justOk
         ]
 
 

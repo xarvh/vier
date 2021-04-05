@@ -62,7 +62,7 @@ metaFileName =
 moduleMain =
     ( "Main"
     , """
-      result = Language/Overview.fibonacci 5
+      result x y = 3
       """
     )
 
@@ -1014,10 +1014,10 @@ viewCaDefinition def =
 viewCaPattern : CA.Pattern -> String
 viewCaPattern p =
     case p of
-        CA.PatternDiscard ->
+        CA.PatternDiscard _ ->
             "_"
 
-        CA.PatternAny n ->
+        CA.PatternAny _ n ->
             n
 
         _ ->

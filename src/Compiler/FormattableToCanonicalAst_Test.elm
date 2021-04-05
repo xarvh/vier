@@ -200,7 +200,7 @@ lists =
                                 [ CA.TypeConstant p "SPCore.Bool" [] ]
                             )
                     , mutable = False
-                    , pattern = CA.PatternAny "Test.l"
+                    , pattern = CA.PatternAny p "Test.l"
                     }
             }
         ]
@@ -272,7 +272,7 @@ tuples =
                                 )
                             )
                     , mutable = False
-                    , pattern = CA.PatternAny "Test.a"
+                    , pattern = CA.PatternAny p "Test.a"
                     }
             }
         , hasError

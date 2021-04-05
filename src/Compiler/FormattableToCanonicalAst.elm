@@ -101,7 +101,7 @@ insertRootStatement ro faStatement caModule =
         FA.Definition fa ->
             do (translateDefinition True (initEnv ro) fa) <| \def ->
             case def.pattern of
-                CA.PatternAny defName ->
+                CA.PatternAny caPos defName ->
                     let
                         caName =
                             makeRootName ro.currentModule defName
@@ -111,7 +111,7 @@ insertRootStatement ro faStatement caModule =
 
                     else
                         caModule
-                            |> Dict.insert caName (CA.Value { def | pattern = CA.PatternAny caName })
+                            |> Dict.insert caName (CA.Value { def | pattern = CA.PatternAny caPos caName })
                             |> Ok
 
                 _ ->
@@ -431,7 +431,7 @@ translateDefinition isRoot env fa =
                     ( p, [] )
 
                 Lib.Right ( n, pas ) ->
-                    ( CA.PatternAny n, pas )
+                    ( CA.PatternAny (tp env.ro fa.pos) n, pas )
 
         additionalNonRootValues =
             if isRoot then
@@ -519,7 +519,7 @@ translatePatternOrFunction env fa =
             translatePatternOrFunction env (FA.PatternApplication pos s [])
 
         FA.PatternLiteral pos l ->
-            CA.PatternLiteral l
+            CA.PatternLiteral (tp env.ro pos) l
                 |> Lib.Left
                 |> Ok
 
@@ -528,7 +528,7 @@ translatePatternOrFunction env fa =
             do (Lib.list_mapRes (translatePattern env) faArgs) <| \caArgs ->
             case sname of
                 StructuredName_TypeOrCons { name, mod } ->
-                    CA.PatternConstructor (resolveValueName env.ro False mod name) caArgs
+                    CA.PatternConstructor (tp env.ro pos) (resolveValueName env.ro False mod name) caArgs
                         |> Lib.Left
                         |> Ok
 
@@ -548,7 +548,7 @@ translatePatternOrFunction env fa =
                                 -- it's a function or variable!
                                 if caArgs == [] then
                                     name
-                                        |> CA.PatternAny
+                                        |> CA.PatternAny (tp env.ro pos)
                                         |> Lib.Left
                                         |> Ok
 
@@ -560,11 +560,12 @@ translatePatternOrFunction env fa =
         FA.PatternList pos fas ->
             let
                 fold pattern last =
-                    CA.PatternConstructor Core.listCons.name [ pattern, last ]
+                    -- TODO pos is probably inaccurate
+                    CA.PatternConstructor (tp env.ro pos) Core.listCons.name [ pattern, last ]
             in
             fas
                 |> Lib.list_mapRes (translatePattern env)
-                |> Result.map (List.foldr fold (CA.PatternConstructor Core.listNil.name []) >> Lib.Left)
+                |> Result.map (List.foldr fold (CA.PatternConstructor (tp env.ro pos) Core.listNil.name []) >> Lib.Left)
 
         FA.PatternRecord pos recordArgs ->
             if recordArgs.extends /= Nothing then
@@ -579,7 +580,7 @@ translatePatternOrFunction env fa =
                         else
                             case maybePattern of
                                 Nothing ->
-                                    Dict.insert name (CA.PatternAny name) dict |> Ok
+                                    Dict.insert name (CA.PatternAny (tp env.ro pos) name) dict |> Ok
 
                                 Just faPattern ->
                                     faPattern
@@ -587,11 +588,11 @@ translatePatternOrFunction env fa =
                                         |> Result.map (\caPattern -> Dict.insert name caPattern dict)
                 in
                 Lib.list_foldlRes fold recordArgs.attrs Dict.empty
-                    |> Result.map (CA.PatternRecord >> Lib.Left)
+                    |> Result.map (CA.PatternRecord (tp env.ro pos) >> Lib.Left)
 
         FA.PatternCons pos faHead faTail ->
             Result.map2
-                (\caHead caTail -> CA.PatternConstructor Core.listCons.name [ caHead, caTail ] |> Lib.Left)
+                (\caHead caTail -> CA.PatternConstructor (tp env.ro pos) Core.listCons.name [ caHead, caTail ] |> Lib.Left)
                 (translatePattern env faHead)
                 (translatePattern env faTail)
 
@@ -779,7 +780,8 @@ translateExpression env faExpr =
 
         FA.List pos faItems ->
             let
-                caPos = tp env.ro pos
+                caPos =
+                    tp env.ro pos
 
                 cons item list =
                     CA.Call caPos
@@ -813,7 +815,7 @@ translateExpression env faExpr =
 
                     Just faBlock ->
                         translateStatementBlock env faBlock
-                            |> Result.map (\caBlock -> [ ( CA.PatternDiscard, caBlock ) ])
+                            |> Result.map (\caBlock -> [ ( CA.PatternDiscard (tp env.ro pos), caBlock ) ])
                 )
 
         _ ->
@@ -1194,9 +1196,18 @@ errorExperimentingWithNoExtensibleTypes ro ( start, end ) =
 
 
 wrapLambda : ReadOnly -> FA.Pos -> CA.Pattern -> List CA.Statement -> List CA.Statement
-wrapLambda ro pos pattern bodyAccum =
+wrapLambda ro faWholePos param bodyAccum =
+    let
+        end = Tuple.second faWholePos
+
+        paramPos =
+             CA.patternPos param
+
+        lambdaPos = { paramPos | e = end }
+
+    in
     [ bodyAccum
-        |> CA.Lambda (tp ro pos) pattern
+        |> CA.Lambda lambdaPos param
         |> CA.Evaluation
     ]
 

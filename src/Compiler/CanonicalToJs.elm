@@ -48,10 +48,10 @@ nativeBinopToFunction spName { jsSymb, mutates, fnName } acc =
     in
     ([ CA.Evaluation
         (CA.Lambda d
-            (CA.PatternAny "a")
+            (CA.PatternAny d "a")
             [ CA.Evaluation
                 (CA.Lambda d
-                    (CA.PatternAny "b")
+                    (CA.PatternAny d "b")
                     [ CA.Evaluation
                         (CA.Call d
                             (CA.Call d
@@ -256,7 +256,7 @@ pickMainName : CA.Pattern -> Maybe JA.Name
 pickMainName pattern =
     Maybe.map (String.replace "/" "$" >> String.replace "." "$") <|
         case pattern of
-            CA.PatternAny name ->
+            CA.PatternAny _ name ->
                 Just <| "$" ++ name
 
             _ ->
@@ -689,16 +689,16 @@ accessWithBracketsInt index =
 testPattern : CA.Pattern -> JA.Expr -> List JA.Expr -> List JA.Expr
 testPattern pattern valueToTest accum =
     case pattern of
-        CA.PatternDiscard ->
+        CA.PatternDiscard _ ->
             accum
 
-        CA.PatternAny name ->
+        CA.PatternAny _ name ->
             accum
 
-        CA.PatternLiteral lit ->
+        CA.PatternLiteral _ lit ->
             JA.Binop "===" (JA.Literal <| translateLiteral lit) valueToTest :: accum
 
-        CA.PatternConstructor path pas ->
+        CA.PatternConstructor _ path pas ->
             let
                 head =
                     JA.Binop "==="
@@ -713,7 +713,7 @@ testPattern pattern valueToTest accum =
             List.foldl foldArg ( 1, head :: accum ) pas
                 |> Tuple.second
 
-        CA.PatternRecord attrs ->
+        CA.PatternRecord _ attrs ->
             let
                 foldAttr name pa =
                     testPattern pa (JA.AccessWithDot name valueToTest)
@@ -724,27 +724,27 @@ testPattern pattern valueToTest accum =
 assignPattern : CA.Pattern -> JA.Expr -> List JA.Statement -> List JA.Statement
 assignPattern pattern exprAccum accum =
     case pattern of
-        CA.PatternDiscard ->
+        CA.PatternDiscard _ ->
             accum
 
-        CA.PatternAny name ->
+        CA.PatternAny _ name ->
             if name == "_" then
                 accum
 
             else
                 JA.Define (translatePath name) exprAccum :: accum
 
-        CA.PatternLiteral literal ->
+        CA.PatternLiteral _ literal ->
             accum
 
-        CA.PatternConstructor path pas ->
+        CA.PatternConstructor _ path pas ->
             let
                 foldEveryArgument ( index, pa ) =
                     assignPattern pa (accessConstructorArg (index + 1) exprAccum)
             in
             List.foldl foldEveryArgument accum (List.indexedMap Tuple.pair pas)
 
-        CA.PatternRecord attrs ->
+        CA.PatternRecord _ attrs ->
             let
                 foldEveryAttr name pa =
                     assignPattern pa (JA.AccessWithDot name exprAccum)
@@ -755,7 +755,7 @@ assignPattern pattern exprAccum accum =
 patternDefinitions : JA.Name -> CA.Pattern -> List JA.Statement
 patternDefinitions mainName pattern =
     case pattern of
-        CA.PatternAny _ ->
+        CA.PatternAny pos _ ->
             []
 
         _ ->

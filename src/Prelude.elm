@@ -167,7 +167,7 @@ nativeBinop : NativeBinopArgs -> ( String, CA.RootDef )
 nativeBinop ar =
     ( ar.symbol
     , CA.Value
-        { pattern = CA.PatternAny ar.symbol
+        { pattern = CA.PatternAny pos ar.symbol
         , mutable = False
         , body = []
         , maybeAnnotation =
@@ -330,7 +330,7 @@ debugTodo : ( String, CA.RootDef )
 debugTodo =
     ( "SPCore/Debug.todo"
     , CA.Value
-        { pattern = CA.PatternAny "SPCore/Debug.todo"
+        { pattern = CA.PatternAny pos "SPCore/Debug.todo"
         , mutable = False
         , body = [{- TODO -}]
         , maybeAnnotation =
@@ -348,7 +348,7 @@ debugLog : ( String, CA.RootDef )
 debugLog =
     ( "SPCore/Debug.log"
     , CA.Value
-        { pattern = CA.PatternAny "SPCore/Debug.log"
+        { pattern = CA.PatternAny pos "SPCore/Debug.log"
         , mutable = False
         , body = [{- TODO -}]
         , maybeAnnotation =
