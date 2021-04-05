@@ -475,4 +475,38 @@ functions =
             """
             (firstEvaluation "f")
             Test.justOk
+        , let
+            findABC mod =
+                Maybe.map3
+                    (\a b c -> ( a, b, c ))
+                    (CA.findValue "Test.a" mod)
+                    (CA.findValue "Test.b" mod)
+                    (CA.findValue "Test.c" mod)
+
+            transform code =
+                code
+                    |> Compiler.TestHelpers.stringToCanonicalModule
+                    |> Compiler.TestHelpers.resErrorToString
+                    |> Result.andThen (findABC >> Result.fromMaybe "findABC fail")
+          in
+          codeTest "short function notation"
+            """
+            a x y z = x + y + z
+            b = fn x y z = x + y + z
+            c = fn x = fn y = fn z = x + y + z
+            """
+            transform
+            (Test.freeform <| \( a, b, c ) ->
+            if a.body == b.body && b.body == c.body then
+                Nothing
+
+            else
+                [ "The three don't match:"
+                , Debug.toString a
+                , Debug.toString b
+                , Debug.toString c
+                ]
+                    |> String.join "\n"
+                    |> Just
+            )
         ]

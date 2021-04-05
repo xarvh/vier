@@ -75,6 +75,15 @@ justOk =
         Ok actualOk ->
             Nothing
 
+freeform : (ok -> Maybe String) -> CodeExpectation ok
+freeform test =
+    CodeExpectation <| \toString result ->
+    case result of
+        Err e ->
+            Just e
+
+        Ok actualOk ->
+          test actualOk
 
 okEqual : ok -> CodeExpectation ok
 okEqual expectedOk =
