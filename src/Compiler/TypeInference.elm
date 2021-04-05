@@ -1,10 +1,10 @@
 module Compiler.TypeInference exposing (..)
 
-import Human.CanonicalAst as HumanCA
 import Compiler.CoreModule as Core
 import Dict exposing (Dict)
 import Generator as TyGen
 import Html
+import Human.CanonicalAst as HumanCA
 import Lib exposing (result_do)
 import RefHierarchy
 import Set exposing (Set)
@@ -1349,10 +1349,12 @@ errorCannotUnify ctx subs a b =
     , Error.text <| HumanCA.typeToString b
     , Error.text ctx.why
     , Error.showLines ctx.pos.c 2 ctx.pos.s
-
-    --     , Error.codeBlock <| Debug.toString subs
+    , subs
+        |> Dict.toList
+        |> List.sortBy Tuple.first
+        |> List.map (\( n, t ) -> n ++ " = " ++ HumanCA.typeToString t)
+        |> String.join "\n"
+        |> Error.codeBlock
     ]
         |> Error.makeRes ctx.pos.n
         |> TyGen.wrap
-
-

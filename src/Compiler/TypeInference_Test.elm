@@ -286,6 +286,22 @@ functions =
             """
             (infer "a")
             Test.justOk
+        , codeTest "[reg] Not sure what is happening"
+            """
+            union Maybe a = Nothing, Just a
+
+            andThen : Maybe a -> (a -> Maybe b) -> Maybe b
+            andThen ma f =
+                try ma as
+                    Nothing then
+                        Nothing
+                    Just a then
+                        f a
+
+            a = andThen Just (Just 1)
+            """
+            (infer "a")
+            Test.justOk
         ]
 
 
