@@ -1,5 +1,6 @@
 module Compiler.TypeInference exposing (..)
 
+import Human.CanonicalAst as HumanCA
 import Compiler.CoreModule as Core
 import Dict exposing (Dict)
 import Generator as TyGen
@@ -1344,95 +1345,14 @@ errorUnboundVariable pos s =
 errorCannotUnify : ErrorContext -> Substitutions -> CA.Type -> CA.Type -> TR a
 errorCannotUnify ctx subs a b =
     [ Error.text <| "Cannot unify:"
-    , Error.text <| typeToString a
-    , Error.text <| typeToString b
+    , Error.text <| HumanCA.typeToString a
+    , Error.text <| HumanCA.typeToString b
     , Error.text ctx.why
     , Error.showLines ctx.pos.c 2 ctx.pos.s
---     , Error.codeBlock <| Debug.toString subs
+
+    --     , Error.codeBlock <| Debug.toString subs
     ]
         |> Error.makeRes ctx.pos.n
         |> TyGen.wrap
 
 
-typeToString : CA.Type -> String
-typeToString ty =
-    case ty of
-        CA.TypeConstant pos name args ->
-            name :: List.map typeToString args |> String.join " " |> parens
-
-        CA.TypeVariable pos name ->
-            name
-
-        CA.TypeFunction pos from fromIsMut to ->
-            [ typeToString from
-            , case fromIsMut of
-                Nothing ->
-                    "?>"
-
-                Just True ->
-                    "@>"
-
-                Just False ->
-                    "->"
-            , typeToString to
-            ]
-                |> String.join " "
-                |> parens
-
-        CA.TypeRecord pos extend attrs ->
-            [ "{"
-            , case extend of
-                Nothing ->
-                    ""
-
-                Just n ->
-                    n ++ " with"
-            , "TODO"
-            , "}"
-            ]
-                |> String.join " "
-
-        CA.TypeAlias pos name ty2 ->
-            [ "<"
-            , name
-            , "="
-            , typeToString ty2
-            , ">"
-            ]
-                |> String.join " "
-
-
-parens s =
-    "(" ++ s ++ ")"
-
-
-
-{-
-   --
-
-
-   trMapError : (ErrorArgs -> ErrorArgs) -> TR a -> TR a
-   trMapError =
-       mapErrorArgs >> Result.mapError >> TyGen.map
-
-
-   mapErrorArgs : (ErrorArgs -> ErrorArgs) -> Error.Error -> Error.Error
-   mapErrorArgs f err =
-       case err of
-           Error.Simple args ->
-               Error.Simple (f args)
-
-           Error.Nested ers ->
-               Error.Nested <| List.map (mapErrorArgs f) ers
-
-
-   unifyError : String -> CA.Pos -> ErrorArgs -> ErrorArgs
-   unifyError message pos uError =
-       { file = uError.file
-       , content =
-           [ Error.text message
-           , Error.showLines pos.c 2 pos.s
-           ]
-               ++ uError.content
-       }
--}

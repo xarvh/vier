@@ -23,6 +23,7 @@ import Dict exposing (Dict)
 import Html exposing (Html)
 import Html.Attributes exposing (class, style)
 import Html.Events
+import Human.CanonicalAst as HumanCA
 import Lib
 import Markdown
 import MetaFile
@@ -911,13 +912,13 @@ viewCanonicalAst mod =
 
 viewCaAlias : CA.AliasDef -> Html msg
 viewCaAlias al =
-    Html.div
+    Html.pre
         []
-        [ [ "alias:"
+        [ [ "alias"
           , al.name
           , String.join " " al.args
           , "="
-          , viewCaType al.ty
+          , HumanCA.typeToString al.ty
           ]
             |> String.join " "
             |> Html.text
