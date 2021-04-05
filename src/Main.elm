@@ -34,6 +34,7 @@ import Test
 import Types.CanonicalAst as CA exposing (Pos)
 import Types.Error exposing (Res)
 import Types.FormattableAst as FA
+import Types.Literal as Literal
 import Types.Meta exposing (Meta)
 import Types.Token as Token exposing (Token)
 
@@ -896,8 +897,10 @@ viewCanonicalAst mod =
 
                 CA.Value d ->
                     viewCaDefinition d
+                        |> indentToString
+                        |> Html.text
     in
-    Html.code
+    Html.pre
         []
         (mod
             |> Dict.toList
@@ -936,23 +939,75 @@ viewCaUnion u =
         ]
 
 
-viewCaDefinition : CA.ValueDef -> Html msg
+
+----
+---
+
+
+type Indent
+    = S String
+    | P Indent
+    | M (Maybe String)
+    | I Indent
+    | L (List Indent)
+
+
+indentToString : Indent -> String
+indentToString indent =
+    indentToStringRec 0 indent []
+        |> List.reverse
+        |> String.join "\n"
+
+
+indentToStringRec : Int -> Indent -> List String -> List String
+indentToStringRec cur ind acc =
+    let
+        shift s =
+            String.repeat cur "  " ++ s
+    in
+    case ind of
+        S s ->
+            shift s :: acc
+
+        M (Just s) ->
+            shift s :: acc
+
+        M Nothing ->
+            acc
+
+        P i ->
+            case indentToStringRec cur i [] of
+                [] ->
+                    acc
+
+                [ a ] ->
+                    (shift "(" ++ a ++ ")") :: acc
+
+                many ->
+                    acc
+                        |> (::) (shift "(")
+                        |> indentToStringRec (cur + 1) i
+                        |> (::) (shift ")")
+
+        I i ->
+            indentToStringRec (cur + 1) i acc
+
+        L inds ->
+            List.foldl (indentToStringRec cur) acc inds
+
+
+
+----
+
+
+viewCaDefinition : CA.ValueDef -> Indent
 viewCaDefinition def =
-    Html.div
-        []
-        [ Html.div
-            []
-            [ def.maybeAnnotation
-                |> Maybe.map (\x -> viewCaPattern def.pattern ++ " : " ++ viewCaType x)
-                |> Maybe.withDefault ""
-                |> Html.text
-            ]
-        , Html.div
-            []
-            [ Html.text <| viewCaPattern def.pattern ++ " = " ]
-        , Html.div
-            [ style "padding-left" "2em" ]
-            (List.map viewCaStatement def.body)
+    L
+        [ def.maybeAnnotation
+            |> Maybe.map (\x -> viewCaPattern def.pattern ++ " : " ++ viewCaType x)
+            |> M
+        , S <| viewCaPattern def.pattern ++ " = "
+        , I <| L <| List.map viewCaStatement def.body
         ]
 
 
@@ -979,7 +1034,7 @@ viewCaType ty =
             name
 
         CA.TypeAlias pos path t ->
-            "<" ++ path ++ ": " ++ viewCaType t ++ ">"
+            "<" ++ path ++ " = " ++ viewCaType t ++ ">"
 
         CA.TypeFunction pos from fromIsMutable to ->
             [ "(" ++ viewCaType from ++ ")"
@@ -1014,52 +1069,58 @@ viewCaType ty =
                 |> (\s -> "{" ++ var ++ s ++ "}")
 
 
-viewCaStatement : CA.Statement -> Html msg
+viewCaStatement : CA.Statement -> Indent
 viewCaStatement s =
     case s of
         CA.Evaluation expr ->
-            Html.div
-                []
-                [ Html.text "("
-                , viewCaExpression expr
-                , Html.text ")"
-                ]
+            P <| viewCaExpression expr
 
         CA.Definition def ->
-            viewCaDefinition def
+            I <| viewCaDefinition def
 
 
-viewCaExpression : CA.Expression -> Html msg
+viewCaExpression : CA.Expression -> Indent
 viewCaExpression expr =
     case expr of
-        CA.Literal _ s ->
-            Html.text (Debug.toString s)
+        CA.Literal _ (Literal.Text s) ->
+            S s
 
-        CA.Variable x s ->
-            Html.text <| Debug.toString x ++ "|" ++ s.name
+        CA.Literal _ (Literal.Number s) ->
+            S s
+
+        CA.Literal _ (Literal.Char s) ->
+            S <| Debug.toString s
+
+        CA.Variable _ s ->
+            s.name
+                :: List.map (\a -> "." ++ a) s.attrPath
+                |> String.join ""
+                |> S
 
         CA.Call _ reference argument ->
-            Html.div
-                [ style "border" "red" ]
+            L
                 [ viewCaExpression reference
-                , Html.div
-                    [ style "padding-left" "2em" ]
-                    [ case argument of
+                , I
+                    (case argument of
                         CA.ArgumentMutable args ->
-                            Html.text <| "@" ++ args.name ++ String.join ":" args.attrPath
+                            S <| "@" ++ args.name ++ String.join ":" args.attrPath
 
                         CA.ArgumentExpression e ->
                             viewCaExpression e
-                    ]
+                    )
                 ]
 
+        CA.Lambda _ param body ->
+            P <|
+                L <|
+                    [ S <| "fn " ++ viewCaPattern param ++ " ="
+                    , I <| L <| List.map viewCaStatement body
+                    ]
+
         _ ->
-            Html.code
-                []
-                [ expr
-                    |> Debug.toString
-                    |> Html.text
-                ]
+            expr
+                |> Debug.toString
+                |> S
 
 
 
@@ -1136,7 +1197,7 @@ viewFaExpression expr =
         FA.Literal pos s ->
             Html.text (Debug.toString s)
 
-        FA.Variable pos {isBinop} s ->
+        FA.Variable pos { isBinop } s ->
             Html.text s
 
         FA.FunctionCall pos reference arguments ->
