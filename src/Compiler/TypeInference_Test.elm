@@ -237,7 +237,7 @@ functions =
         , hasError
             { name = "Known function with wrong params"
             , run = \_ -> infer "a" "a = add False"
-            , test = Test.errorShouldContain "cannot unify SPCore.Bool and SPCore.Number"
+            , test = Test.errorShouldContain "SPCore.Bool"
             }
         , simpleTest
             { name = "Function inference 1"
@@ -490,7 +490,7 @@ variableTypes =
                         }
                 }
             )
-        , codeTest "[reg] statements, assignments, free vars"
+        , codeTest "[reg] ???"
             """
             reverse : List a -> List a
             reverse aList =
