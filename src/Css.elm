@@ -85,10 +85,10 @@ body {
 
 /* from https://github.com/metalelf0/jellybeans-nvim/blob/main/lua/lush_theme/jellybeans-nvim.lua */
 .valueLo  { color: #81c0df; }
-.globalLo { color: #7d98c4; }
+.globalLo { color: #81c0df; text-decoration: underline; }
 
 .valueUp  { color: #fad07a; }
-.globalUp { color: #bb9a58; }
+.globalUp { color: #fad07a; text-decoration: underline; }
 
 .comment  { color: #888888; }
 
@@ -97,7 +97,7 @@ body {
 .mutable  { color: #fe99c0; }
 .op       { color: #ffcd6; }
 .keyword  { color: #ee8eff; }
-.paren    { color: #799d6a; }
+.paren    { color: #4f9631; }
 
 
     """

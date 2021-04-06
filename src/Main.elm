@@ -422,15 +422,20 @@ viewSyntaxHighlight meta code =
 viewColorToken : Meta -> String -> Token -> ( Int, List (Html msg) ) -> ( Int, List (Html msg) )
 viewColorToken meta code token ( start, accum ) =
     let
-        x =
-            Html.span
-                [ class (tokenToClass meta token) ]
-                [ code
-                    |> String.slice start token.end
-                    |> Html.text
-                ]
+        slice =
+            code
+                |> String.slice start token.end
+
+        acc =
+            if String.startsWith " " slice then
+                Html.span [ class (tokenToClass meta token) ] [ Html.text <| String.dropLeft 1 slice ]
+                    :: Html.span [] [ Html.text " " ]
+                    :: accum
+
+            else
+                Html.span [ class (tokenToClass meta token) ] [ Html.text slice ] :: accum
     in
-    ( token.end, x :: accum )
+    ( token.end, acc )
 
 
 tokenToClass : Meta -> Token -> String
@@ -948,17 +953,17 @@ viewCaExpression expr =
                     |> Maybe.withDefault []
                     |> L
                 , attrs
-                  |> Dict.toList
-                  |> List.sortBy Tuple.first
-                  |> List.map (\(n, e) -> L [ S <| n ++ " = ",  viewCaExpression e ])
-                  |> L
+                    |> Dict.toList
+                    |> List.sortBy Tuple.first
+                    |> List.map (\( n, e ) -> L [ S <| n ++ " = ", viewCaExpression e ])
+                    |> L
                 , S "}"
                 ]
 
         --CA.Try
         _ ->
-            (expr, ())
-                |> CA.extensionFold_expression (\_ _ -> (CA.posDummy, ()))
+            ( expr, () )
+                |> CA.extensionFold_expression (\_ _ -> ( CA.posDummy, () ))
                 |> Tuple.second
                 |> Debug.toString
                 |> S
@@ -1119,6 +1124,9 @@ overviewString =
 [#
    SquarePants has no import statements: instead, project-wide imports are
    declared in the `meta` file.
+
+   Among other things, this makes it really easy to flag globals, for example
+   by underscoring them.
 #]
 
 
@@ -1260,3 +1268,4 @@ getAllHouses getAsset =
     getAsset "pineapple" >> to fn pineapple =
        Just { rock, moai, pineapple }
     """
+        |> String.trim
