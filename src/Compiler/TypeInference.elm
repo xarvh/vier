@@ -1345,9 +1345,10 @@ errorUnboundVariable pos s =
 errorCannotUnify : ErrorContext -> Substitutions -> CA.Type -> CA.Type -> TR a
 errorCannotUnify ctx subs a b =
     [ Error.text <| "Cannot unify:"
-    , Error.text <| HumanCA.typeToString a
-    , Error.text <| HumanCA.typeToString b
-    , Error.text ctx.why
+    , Error.text <| "* t1 = " ++ HumanCA.typeToString a
+    , Error.text <| "* t2 = " ++ HumanCA.typeToString b
+    , Error.text <| "why : " ++ ctx.why
+    , Error.text <| "expr = " ++ String.slice ctx.pos.s ctx.pos.e ctx.pos.c
     , Error.showLines ctx.pos.c 2 ctx.pos.s
     , subs
         |> Dict.toList

@@ -21,7 +21,7 @@ css =
 .border { border: 1px solid lightgray; }
 
 .thirds > * {
-  /* min-width: 300px; */
+  max-width: 90vw;
 }
 
 

@@ -48,9 +48,9 @@ runTests =
 initialFiles =
     [ moduleMain
     , moduleMaybe
---     , moduleList
+    , moduleList
     , moduleText
---     , languageOverview
+    , languageOverview
     , ( metaFileName, Prelude.metaString )
     ]
         |> List.map (Tuple.mapSecond Compiler.TestHelpers.unindent)
@@ -63,7 +63,13 @@ metaFileName =
 moduleMain =
     ( "Main"
     , """
-result = Maybe.andThen Just (Just 1)
+result =
+    # define a function
+    getAssets url =
+      Just << url .. ".jpg"
+
+    # the value of the last statement is returned
+    Language/Overview.getAllHouses getAssets
       """
     )
 
@@ -73,8 +79,8 @@ moduleMaybe =
     , """
       union Maybe a = Nothing, Just a
 
-      andThen : Maybe a -> (a -> Maybe b) -> Maybe b
-      andThen ma f =
+      andThen : (a -> Maybe b) -> Maybe a -> Maybe b
+      andThen f ma =
           try ma as
               Nothing then
                   Nothing
@@ -949,8 +955,11 @@ viewCaExpression expr =
                 , S "}"
                 ]
 
+        --CA.Try
         _ ->
-            expr
+            (expr, ())
+                |> CA.extensionFold_expression (\_ _ -> (CA.posDummy, ()))
+                |> Tuple.second
                 |> Debug.toString
                 |> S
 
