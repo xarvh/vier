@@ -26,7 +26,7 @@ css =
 
 
 body {
-  background: #003;
+  background: #151515;
   color: lightgray;
 }
 
