@@ -43,7 +43,7 @@ body {
 
 .editor-content {
   position: relative;
-  background: #002;
+  background: #151515;
 
   margin-left: 8px;
 }
@@ -72,7 +72,7 @@ body {
   font-family: monospace;
   white-space: pre;
 
-  caret-color: #ddd;
+  caret-color: #c6b6ee;
 }
 
 .editor-overlay {
@@ -83,15 +83,21 @@ body {
   text-align: right;
 }
 
-.mutable  { color: red; }
-.comment  { color: #00d; }
-.literal  { color: green; }
-.valueUp  { color: #aff; }
-.valueLo  { color: #ddd; }
-.globalUp { color: #499; }
-.globalLo { color: #999; }
-.op       { color: red; }
-.keyword  { color: #ffdd07; }
-.paren    { color: red; }
+/* from https://github.com/metalelf0/jellybeans-nvim/blob/main/lua/lush_theme/jellybeans-nvim.lua */
+.valueLo  { color: #81c0df; }
+.globalLo { color: #7d98c4; }
+
+.valueUp  { color: #fad07a; }
+.globalUp { color: #bb9a58; }
+
+.comment  { color: #888888; }
+
+.literal  { color: #de6240; }
+
+.mutable  { color: #fe99c0; }
+.op       { color: #ffcd6; }
+.keyword  { color: #ee8eff; }
+.paren    { color: #799d6a; }
+
 
     """
