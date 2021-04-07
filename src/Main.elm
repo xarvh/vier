@@ -138,6 +138,7 @@ each ls f =
             f head
             each tail f
 
+
 reverse : List a -> List a
 reverse aList =
     rec ls acc =
@@ -149,6 +150,14 @@ reverse aList =
                 rec tail (SPCore.Cons head acc)
 
     rec aList []
+
+
+repeat : Number -> a -> List a
+repeat n a =
+    rec c acc =
+        if c > 0 then rec (c - 1) (SPCore.Cons a acc) else acc
+
+    rec n []
         """
     )
 
@@ -1220,15 +1229,15 @@ listOfText = [
     ]
 
 
-# `>>` and `<<` are just syntactic sugar
-# They help using less parens and
-# help visualizing how a value is transformed
+# `>>` and `<<` are just syntactic sugar, read them as "send to".
+# They help using less parens and help visualizing how a value is
+# transformed step-by-step.
 repeatHello : Int -> Text
 repeatHello times =
-    listOfText
-        >> List.reverse
+    "Hello!"
+        >> List.repeat times
         >> Text.join ", "
-        >> (..) " and append this text at the end"
+        >> (..) " And append this text at the end"
 
 
 # When you see `@`, it means "this stuff is mutable"
