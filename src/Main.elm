@@ -50,6 +50,7 @@ initialFiles =
     , moduleMaybe
     , moduleList
     , moduleText
+    , moduleRandom
     , languageOverview
     , ( metaFileName, Prelude.metaString )
     ]
@@ -149,6 +150,49 @@ reverse aList =
 
     rec aList []
         """
+    )
+
+
+moduleRandom =
+    ( "SPCore/Random"
+    , """
+[# DOC
+
+Comments starting with `DOC` are documentation. =)
+
+The main codebase always exposes everything.
+Only libraries can hide types, values and constructors, and they are not yet supported.
+
+#]
+union Seed = Seed Number
+
+
+[# DOC
+
+This function is here just to illustrate how to use mutables.
+
+It's very much not a practical pseudo random generator.
+
+#]
+number : Number -> Number -> Seed @> Number
+number min max wrappedSeed =
+
+    Seed seed = wrappedSeed
+
+    @wrappedSeed :=
+      seed * 4871
+          # TODO implement `modBy` =(
+          # >> modBy 2147483647
+          >> Seed
+
+    # TODO implement `clamp`
+    if seed > max then
+        max
+    else if seed < min then
+        min
+    else
+        seed
+      """
     )
 
 
@@ -1204,13 +1248,11 @@ average numbers =
     sum / n
 
 
-[# TODO: implement Random.
 # The argument preceding `@>` is mutable
 generateTwoRandomNumbers : Int -> Int -> Random.Seed @> Int & Int
 generateTwoRandomNumbers min max seed =
     # '&' is used for tuples
-    Random.int min max @seed & Random.int min max @seed
-#]
+    Random.number min max @seed & Random.number min max @seed
 
 
 

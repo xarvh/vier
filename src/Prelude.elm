@@ -84,6 +84,13 @@ metaString =
             "Maybe"
           ]
         }, {
+          "path": "SPCore/Random",
+          "importAs": "Random",
+          "globalValues": [
+          ],
+          "globalTypes": [
+          ]
+        }, {
           "path": "SPCore/Text",
           "importAs": "Text",
           "globalValues": [
