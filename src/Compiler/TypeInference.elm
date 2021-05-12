@@ -151,30 +151,9 @@ dict_fold_nr f dict accum =
 --
 
 
-{-| This is used to populate the environment with all the root values that the inspected module will reference.
-
-The functions of the module itself should be added too.
-
--}
-insertRootAnnotation : CA.RootValueDef -> Env -> Env
-insertRootAnnotation rootDef env =
-    case rootDef.maybeAnnotation of
-        Nothing ->
-            env
-
-        Just annotation ->
-            Dict.insert
-                rootDef.name
-                { type_ = annotation
-                , forall = typeVarsFromType annotation
-                , mutable = False
-                }
-                env
-
-
 inspectModule : Env -> CA.AllDefs -> Res ( CA.AllDefs, Env, Substitutions )
-inspectModule annotations mod =
-    result_do (Lib.dict_foldRes (\k -> addConstructors) mod annotations) <| \env ->
+inspectModule prelude mod =
+    result_do (Lib.dict_foldRes (\k -> addConstructors) mod prelude) <| \env ->
     let
         asValue rootDef =
             case rootDef of
@@ -189,11 +168,8 @@ inspectModule annotations mod =
                 |> Dict.values
                 |> List.filterMap asValue
 
-        nonExposedDefs =
-            List.filter (\def -> def.maybeAnnotation == Nothing) valueDefs
-
         gen =
-            do_nr (list_foldl_nr (.name >> insertVariableWithGeneratedType todoPos False) nonExposedDefs env) <| \env1 ->
+            do_nr (list_foldl_nr insertRootValue valueDefs env) <| \env1 ->
             do_nr (list_foldl_nr inspectRootDefinition valueDefs ( env1, Dict.empty )) <| \( env2, subs ) ->
             ( mod
             , refineEnv subs env2
@@ -205,6 +181,28 @@ inspectModule annotations mod =
     gen
         |> TyGen.run 0
         |> Tuple.first
+
+
+
+insertRootValue : CA.RootValueDef -> Env -> TR Env
+insertRootValue rootDef env =
+    case rootDef.maybeAnnotation of
+        Nothing ->
+            insertVariableWithGeneratedType todoPos False rootDef.name env
+
+        Just annotation ->
+            env
+                |> Dict.insert rootDef.name
+                    { type_ = annotation
+                    , forall = typeVarsFromType annotation
+                    , mutable = False
+                    }
+                |> Ok
+                |> TyGen.wrap
+
+
+
+
 
 
 addConstructors : CA.RootDef -> Env -> Res Env
