@@ -112,8 +112,9 @@ prelude =
 
 insertBinop : String -> Binop -> CA.AllDefs -> CA.AllDefs
 insertBinop _ b =
-    { pattern = CA.PatternAny pos b.symbol
-    , mutable = False
+    { name = b.symbol
+    , pos = pos
+    , isNative = True
     , body = []
     , maybeAnnotation = Just b.ty
     }
@@ -123,8 +124,9 @@ insertBinop _ b =
 
 insertFunction : ( String, CA.Type ) -> CA.AllDefs -> CA.AllDefs
 insertFunction ( name, ty ) =
-    { pattern = CA.PatternAny pos name
-    , mutable = False
+    { name = name
+    , pos = pos
+    , isNative = True
     , body = []
     , maybeAnnotation = Just ty
     }

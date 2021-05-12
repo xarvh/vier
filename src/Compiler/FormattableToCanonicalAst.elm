@@ -100,19 +100,27 @@ insertRootStatement ro faStatement caModule =
             errorTodo "Root Evaluations don't really do much =|"
 
         FA.Definition fa ->
-            do (translateDefinition True (initEnv ro) fa) <| \def ->
-            case def.pattern of
+            do (translateDefinition True (initEnv ro) fa) <| \localDef ->
+            case localDef.pattern of
                 CA.PatternAny caPos defName ->
                     let
                         caName =
                             makeRootName ro.currentModule defName
+
+                        rootDef =
+                            { name = caName
+                            , pos = caPos
+                            , maybeAnnotation = localDef.maybeAnnotation
+                            , isNative = False
+                            , body = localDef.body
+                            }
                     in
                     if Dict.member caName caModule then
                         errorTodo <| defName ++ " declared twice!"
 
                     else
                         caModule
-                            |> Dict.insert caName (CA.Value { def | pattern = CA.PatternAny caPos caName })
+                            |> Dict.insert caName (CA.Value rootDef)
                             |> Ok
 
                 _ ->
@@ -430,7 +438,7 @@ insertParamNames param =
             CA.patternNames pa |> Set.union
 
 
-translateDefinition : Bool -> Env -> FA.ValueDef -> Res CA.ValueDef
+translateDefinition : Bool -> Env -> FA.ValueDef -> Res CA.LocalValueDef
 translateDefinition isRoot env fa =
     do (validateFaDefinition fa) <| \_ ->
     do (translateMaybeAnnotation env.ro fa) <| \maybeAnnotation ->

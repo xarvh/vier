@@ -42,16 +42,17 @@ import Types.Token as Token exposing (Token)
 
 runTests =
     False
-        || True
+--         || True
 
 
 initialFiles =
     [ moduleMain
-    , moduleMaybe
-    , moduleList
-    , moduleText
-    , moduleRandom
-    , languageOverview
+
+    --     , moduleMaybe
+    --     , moduleList
+    --     , moduleText
+    --     , moduleRandom
+    --     , languageOverview
     , ( metaFileName, Prelude.metaString )
     ]
         |> List.map (Tuple.mapSecond Compiler.TestHelpers.unindent)
@@ -64,14 +65,15 @@ metaFileName =
 moduleMain =
     ( "Main"
     , """
-each : List a -> (a -> b) -> None
-each ls f =
-    try ls as
-        SPCore.Nil then
-            None
+x =
+  m @= 0
 
-result =
-      1 :: SPCore.Nil = SPCore.Nil
+y =
+  m @= 0
+  @m += 1
+
+a =
+  { x, y }
       """
     )
 
@@ -818,7 +820,7 @@ viewCanonicalAst mod =
                     viewCaUnion u
 
                 CA.Value d ->
-                    viewCaDefinition d
+                    viewCaRootDefinition d
                         |> indentToString
                         |> Html.text
     in
@@ -922,13 +924,24 @@ indentToStringRec cur ind acc =
 ----
 
 
-viewCaDefinition : CA.ValueDef -> Indent
-viewCaDefinition def =
+viewCaLocalDefinition : CA.LocalValueDef -> Indent
+viewCaLocalDefinition def =
     L
         [ def.maybeAnnotation
             |> Maybe.map (\x -> viewCaPattern def.pattern ++ " : " ++ HumanCA.typeToString x)
             |> M
         , S <| viewCaPattern def.pattern ++ " = "
+        , I <| L <| List.map viewCaStatement def.body
+        ]
+
+
+viewCaRootDefinition : CA.RootValueDef -> Indent
+viewCaRootDefinition def =
+    L
+        [ def.maybeAnnotation
+            |> Maybe.map (\x -> def.name ++ " : " ++ HumanCA.typeToString x)
+            |> M
+        , S <| def.name ++ " = "
         , I <| L <| List.map viewCaStatement def.body
         ]
 
@@ -973,7 +986,7 @@ viewCaStatement s =
             P <| viewCaExpression expr
 
         CA.Definition def ->
-            I <| viewCaDefinition def
+            I <| viewCaLocalDefinition def
 
 
 viewCaVariableArgs : CA.VariableArgs -> Indent

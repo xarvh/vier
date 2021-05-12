@@ -29,7 +29,7 @@ applyAndGet getAs name code =
         |> Result.andThen (getAs >> Result.fromMaybe "wrong variant")
 
 
-applyAndGetValue : String -> String -> Result String CA.ValueDef
+applyAndGetValue : String -> String -> Result String CA.RootValueDef
 applyAndGetValue name code =
     code
         |> TH.stringToCanonicalModule

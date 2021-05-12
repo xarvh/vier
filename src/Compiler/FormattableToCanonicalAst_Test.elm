@@ -51,7 +51,7 @@ hasError =
     Test.hasError Debug.toString
 
 
-firstDefinition : String -> String -> Result String CA.ValueDef
+firstDefinition : String -> String -> Result String CA.RootValueDef
 firstDefinition name code =
     code
         |> Compiler.TestHelpers.stringToCanonicalModule
@@ -87,7 +87,7 @@ asEvaluation s =
 
 {-| TODO move this to Helpers?
 -}
-transformAB : String -> Result String ( CA.ValueDef, CA.ValueDef )
+transformAB : String -> Result String ( CA.RootValueDef, CA.RootValueDef )
 transformAB code =
     let
         findAB mod =
@@ -117,7 +117,7 @@ shouldHaveSameAB getter =
             |> Just
 
 
-transformABC : String -> Result String ( CA.ValueDef, CA.ValueDef, CA.ValueDef )
+transformABC : String -> Result String ( CA.RootValueDef, CA.RootValueDef, CA.RootValueDef )
 transformABC code =
     let
         findABC mod =
@@ -226,8 +226,9 @@ lists =
                                 "SPCore.List"
                                 [ CA.TypeConstant p "SPCore.Bool" [] ]
                             )
-                    , mutable = False
-                    , pattern = CA.PatternAny p "Test.l"
+                    , isNative = False
+                    , name = "Test.l"
+                    , pos = p
                     }
             }
         ]
@@ -298,8 +299,9 @@ tuples =
                                     ]
                                 )
                             )
-                    , mutable = False
-                    , pattern = CA.PatternAny p "Test.a"
+                    , name = "Test.a"
+                    , isNative = False
+                    , pos = p
                     }
             }
         , hasError

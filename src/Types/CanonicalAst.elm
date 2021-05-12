@@ -50,7 +50,7 @@ posDummy =
 type RootDef
     = Union UnionDef
     | Alias AliasDef
-    | Value ValueDef
+    | Value RootValueDef
 
 
 type alias AliasDef =
@@ -67,27 +67,29 @@ type alias UnionDef =
     }
 
 
-{-| TODO
+type alias RootValueDef =
+    { name : String
+    , pos : Pos
+    , maybeAnnotation : Maybe Type
+    , isNative : Bool
+    , body : List Statement
+    }
 
-      split RootValueDef
-      (Right now I'm using `body == []` for native defs)
 
-      -- also use this for every other name?
-      type alias ref = { mod : String, def : String }
-
-      type alias RootValueDef e =
-          { ref : Ref
-          , maybeAnnotation : Maybe Type
-          , isNative : Bool
-          , body : List (Statement e)
-          }
-
--}
-type alias ValueDef =
+type alias LocalValueDef =
     { pattern : Pattern
     , mutable : Bool
     , maybeAnnotation : Maybe Type
     , body : List Statement
+    }
+
+
+rootToLocalDef : RootValueDef -> LocalValueDef
+rootToLocalDef r =
+    { pattern = PatternAny r.pos r.name
+    , mutable = False
+    , maybeAnnotation = r.maybeAnnotation
+    , body = r.body
     }
 
 
@@ -112,7 +114,7 @@ type Type
 
 
 type Statement
-    = Definition ValueDef
+    = Definition LocalValueDef
       -- Evaluations are needed for return, mutation and debug
     | Evaluation Expression
 
@@ -212,7 +214,7 @@ patternPos pa =
 --
 
 
-asValue : RootDef -> Maybe ValueDef
+asValue : RootDef -> Maybe RootValueDef
 asValue r =
     case r of
         Value v ->
@@ -242,7 +244,7 @@ asUnion r =
             Nothing
 
 
-split : AllDefs -> ( Dict String AliasDef, Dict String UnionDef, Dict String ValueDef )
+split : AllDefs -> ( Dict String AliasDef, Dict String UnionDef, Dict String RootValueDef )
 split =
     let
         part3 n rootDef ( als, uns, vals ) =
@@ -259,11 +261,11 @@ split =
     Dict.foldl part3 ( Dict.empty, Dict.empty, Dict.empty )
 
 
-findValue : String -> AllDefs -> Maybe ValueDef
+findValue : String -> AllDefs -> Maybe RootValueDef
 findValue name mod =
     case Dict.get name mod of
-        Just (Value valueDef) ->
-            Just valueDef
+        Just (Value def) ->
+            Just def
 
         _ ->
             Nothing
@@ -329,9 +331,33 @@ extensionFold_module f ( a_defs, acc0 ) =
                 Value a_valueDef ->
                     Tuple.mapFirst
                         (\b_rootDef -> Dict.insert name (Value b_rootDef) b_defs)
-                        (extensionFold_valueDef f ( a_valueDef, accX ))
+                        (extensionFold_rootValueDef f ( a_valueDef, accX ))
     in
     Dict.foldl fold ( Dict.empty, acc0 ) a_defs
+
+
+extensionFold_rootValueDef : (Fold -> ( Pos, acc ) -> ( Pos, acc )) -> ( RootValueDef, acc ) -> ( RootValueDef, acc )
+extensionFold_rootValueDef f ( def, acc0 ) =
+    let
+        ( b_body, acc1 ) =
+            extensionFold_block f ( def.body, acc0 )
+
+        ( b_ann, acc2 ) =
+            case def.maybeAnnotation of
+                Nothing ->
+                    ( def.maybeAnnotation, acc1 )
+
+                Just ty ->
+                    extensionFold_type f ( ty, acc1 ) |> Tuple.mapFirst Just
+    in
+    ( { name = def.name
+      , pos = def.pos
+      , isNative = def.isNative
+      , maybeAnnotation = b_ann
+      , body = b_body
+      }
+    , acc2
+    )
 
 
 extensionFold_aliasDef : (Fold -> ( Pos, acc ) -> ( Pos, acc )) -> ( AliasDef, acc ) -> ( AliasDef, acc )
@@ -370,7 +396,7 @@ extensionFold_unionDef f ( def, acc ) =
             )
 
 
-extensionFold_valueDef : (Fold -> ( Pos, acc ) -> ( Pos, acc )) -> ( ValueDef, acc ) -> ( ValueDef, acc )
+extensionFold_valueDef : (Fold -> ( Pos, acc ) -> ( Pos, acc )) -> ( LocalValueDef, acc ) -> ( LocalValueDef, acc )
 extensionFold_valueDef f ( def, acc0 ) =
     let
         ( b_body, acc1 ) =

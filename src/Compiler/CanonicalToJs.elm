@@ -278,7 +278,7 @@ pickMainName pattern =
 --
 
 
-getValueDefName : CA.ValueDef -> String
+getValueDefName : CA.LocalValueDef -> String
 getValueDefName def =
     def.pattern
         |> CA.patternNames
@@ -287,7 +287,7 @@ getValueDefName def =
         |> Maybe.withDefault "BLARGH"
 
 
-getValueRefs : CA.ValueDef -> Set String
+getValueRefs : CA.LocalValueDef -> Set String
 getValueRefs def =
     let
         fn fold ( ext, set ) =
@@ -321,7 +321,7 @@ translateAll subs ca =
                 |> List.sortBy .name
                 |> List.concatMap translateUnion
 
-        isFunctionBlock : CA.ValueDef -> Bool
+        isFunctionBlock : CA.RootValueDef -> Bool
         isFunctionBlock def =
             case def.body of
                 (CA.Evaluation (CA.Lambda _ _ _)) :: [] ->
@@ -336,7 +336,7 @@ translateAll subs ca =
                 |> List.partition isFunctionBlock
 
         reorderedNonFuns =
-            RefHierarchy.reorder getValueDefName getValueRefs nonFns
+            RefHierarchy.reorder .name (CA.rootToLocalDef >> getValueRefs) nonFns
 
         env =
             { subs = subs
@@ -345,12 +345,17 @@ translateAll subs ca =
 
         vals =
             (fns ++ reorderedNonFuns)
-                |> List.concatMap (translateValueDef env >> Tuple.first)
+                |> List.concatMap (CA.rootToLocalDef >> translateValueDef env >> Tuple.first)
     in
     nativeBinopsAsFns ++ cons ++ vals
 
 
-translateValueDef : Env -> CA.ValueDef -> ( List JA.Statement, Env )
+
+
+
+
+
+translateValueDef : Env -> CA.LocalValueDef -> ( List JA.Statement, Env )
 translateValueDef env caDef =
     if caDef.body == [] then
         ( [], env )

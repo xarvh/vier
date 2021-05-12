@@ -136,7 +136,11 @@ applyAliasesToUnions aliases =
 --
 
 
-applyAliasesToValues : Dict Name CA.AliasDef -> Dict String CA.ValueDef -> Res (Dict String CA.ValueDef)
+type alias ValueDef a =
+    { a | maybeAnnotation : Maybe CA.Type, body : List CA.Statement }
+
+
+applyAliasesToValues : Dict Name CA.AliasDef -> Dict String (ValueDef a) -> Res (Dict String (ValueDef a))
 applyAliasesToValues aliases =
     let
         ga : GetAlias
@@ -146,7 +150,7 @@ applyAliasesToValues aliases =
     Lib.dict_mapRes (\k -> normalizeValueDef ga)
 
 
-normalizeValueDef : GetAlias -> CA.ValueDef -> Res CA.ValueDef
+normalizeValueDef : GetAlias -> ValueDef a -> Res (ValueDef a)
 normalizeValueDef ga vdef =
     Result.map2
         (\maybeAnnotation body ->

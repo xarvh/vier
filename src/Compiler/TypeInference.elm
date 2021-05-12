@@ -133,10 +133,11 @@ list_foldl_nr f ls accum =
             list_foldl_nr f tail newAccum
 
 
-list_map_nr : (a -> TR b) -> List a -> TR (List b)
-list_map_nr f ls =
-    list_foldl_nr (\a acc -> map_nr (\b -> b :: acc) (f a)) ls []
-        |> map_nr List.reverse
+
+-- list_map_nr : (a -> TR b) -> List a -> TR (List b)
+-- list_map_nr f ls =
+--     list_foldl_nr (\a acc -> map_nr (\b -> b :: acc) (f a)) ls []
+--         |> map_nr List.reverse
 
 
 dict_fold_nr : (comparable -> item -> accum -> TR accum) -> Dict comparable item -> accum -> TR accum
@@ -150,9 +151,30 @@ dict_fold_nr f dict accum =
 --
 
 
+{-| This is used to populate the environment with all the root values that the inspected module will reference.
+
+The functions of the module itself should be added too.
+
+-}
+insertRootAnnotation : CA.RootValueDef -> Env -> Env
+insertRootAnnotation rootDef env =
+    case rootDef.maybeAnnotation of
+        Nothing ->
+            env
+
+        Just annotation ->
+            Dict.insert
+                rootDef.name
+                { type_ = annotation
+                , forall = typeVarsFromType annotation
+                , mutable = False
+                }
+                env
+
+
 inspectModule : Env -> CA.AllDefs -> Res ( CA.AllDefs, Env, Substitutions )
-inspectModule prelude mod =
-    result_do (Lib.dict_foldRes (\k -> addConstructors) mod prelude) <| \env ->
+inspectModule annotations mod =
+    result_do (Lib.dict_foldRes (\k -> addConstructors) mod annotations) <| \env ->
     let
         asValue rootDef =
             case rootDef of
@@ -162,16 +184,19 @@ inspectModule prelude mod =
                 _ ->
                     Nothing
 
-        statements =
+        valueDefs =
             mod
                 |> Dict.values
                 |> List.filterMap asValue
-                |> List.map CA.Definition
+
+        nonExposedDefs =
+            List.filter (\def -> def.maybeAnnotation == Nothing) valueDefs
 
         gen =
-            do_nr (inspectBlock statements env Dict.empty) <| \( shouldBeNone, env1, subs ) ->
+            do_nr (list_foldl_nr (.name >> insertVariableWithGeneratedType todoPos False) nonExposedDefs env) <| \env1 ->
+            do_nr (list_foldl_nr inspectRootDefinition valueDefs ( env1, Dict.empty )) <| \( env2, subs ) ->
             ( mod
-            , refineEnv subs env1
+            , refineEnv subs env2
             , subs
             )
                 |> Ok
@@ -805,41 +830,62 @@ inspectStatement statement env subs =
                 |> Ok
                 |> TyGen.wrap
 
-        CA.Definition { pattern, mutable, body, maybeAnnotation } ->
-            let
-                insert =
-                    insertVariableFromDefinition (CA.patternPos pattern) mutable maybeAnnotation
-            in
-            do_nr (inspectBlock body env subs) <| \( bodyType, _, subs1 ) ->
-            do_nr (inspectPattern insert pattern bodyType ( env, subs1 )) <| \( env1, subs2 ) ->
-            let
-                -- TODO All this stuff is just repeating stuff that insertVariableFromDefinition has done already.
-                -- Can we avoid the duplication?
-                names =
-                    CA.patternNames pattern
+        CA.Definition def ->
+            do_nr (insertDefinition def env) <| \env1 ->
+            do_nr (inspectDefinition def ( env1, subs )) <| \( e, s ) ->
+            ( Core.noneType, e, s )
+                |> Ok
+                |> TyGen.wrap
 
-                -- TODO we need to calculate forall only if there is an annotation
-                refinedType =
-                    refineType subs2 bodyType
 
-                -- https://cstheory.stackexchange.com/questions/42554/extending-hindley-milner-to-type-mutable-references
-                -- This is also the reason why we can't infer whether a value is mutable or not
-                forall =
-                    if mutable then
-                        Set.empty
+inspectRootDefinition : CA.RootValueDef -> Eas -> TR Eas
+inspectRootDefinition def eas =
+    if def.isNative then
+        eas
+            |> Ok
+            |> TyGen.wrap
 
-                    else
-                        generalize names (refineEnv subs2 env) refinedType
-            in
-            case Maybe.andThen (\ann -> annotationTooGeneral subs2 ann refinedType forall) maybeAnnotation of
-                Just error ->
-                    error
+    else
+        inspectDefinition (CA.rootToLocalDef def) eas
 
-                _ ->
-                    -- The type of a definition is always None
-                    ( Core.noneType, refineEnv subs2 env1, subs2 )
-                        |> Ok
-                        |> TyGen.wrap
+
+inspectDefinition : CA.LocalValueDef -> Eas -> TR Eas
+inspectDefinition def ( env, subs ) =
+    let
+        -- TODO clarify the relationship between insertDefinition and insertVariableFromDefinition
+        insert =
+            insertVariableFromDefinition (CA.patternPos def.pattern) def.mutable def.maybeAnnotation
+    in
+    do_nr (inspectBlock def.body env subs) <| \( bodyType, _, subs1 ) ->
+    do_nr (inspectPattern insert def.pattern bodyType ( env, subs1 )) <| \( env1, subs2 ) ->
+    let
+        -- TODO All this stuff is just repeating stuff that insertVariableFromDefinition has done already.
+        -- Can we avoid the duplication?
+        names =
+            CA.patternNames def.pattern
+
+        -- TODO we need to calculate forall only if there is an annotation
+        refinedType =
+            refineType subs2 bodyType
+
+        -- https://cstheory.stackexchange.com/questions/42554/extending-hindley-milner-to-type-mutable-references
+        -- This is also the reason why we can't infer whether a value is mutable or not
+        forall =
+            if def.mutable then
+                Set.empty
+
+            else
+                generalize names (refineEnv subs2 env1) refinedType
+    in
+    case Maybe.andThen (\ann -> annotationTooGeneral subs2 ann refinedType forall) def.maybeAnnotation of
+        Just error ->
+            error
+
+        _ ->
+            -- The type of a definition is always None
+            ( refineEnv subs2 env1, subs2 )
+                |> Ok
+                |> TyGen.wrap
 
 
 insertVariableFromDefinition : CA.Pos -> Bool -> Maybe Type -> Name -> Type -> Eas -> TR Eas
@@ -1008,18 +1054,18 @@ inspectBlock stats parentEnv subs =
             |> TyGen.wrap
 
     else
-        let
-            ( definitions, newStats ) =
-                reorderStatements stats
-        in
-        do_nr (list_foldl_nr insertDefinition definitions parentEnv) <| \localEnv ->
-        do_nr (inspectStatementRec newStats Core.noneType localEnv subs) <| \typeAndEnvAndSubs ->
+        --         let
+        --             ( definitions, newStats ) =
+        --                 reorderStatements stats
+        --         in
+        --         do_nr (list_foldl_nr insertDefinition definitions parentEnv) <| \localEnv ->
+        do_nr (inspectStatementRec stats Core.noneType parentEnv subs) <| \typeAndEnvAndSubs ->
         TyGen.wrap <|
             let
                 ( ty, env, _ ) =
                     typeAndEnvAndSubs
 
-                defContainsFunctions : CA.ValueDef -> Bool
+                defContainsFunctions : CA.LocalValueDef -> Bool
                 defContainsFunctions def =
                     def.pattern
                         |> CA.patternNames
@@ -1030,7 +1076,9 @@ inspectBlock stats parentEnv subs =
                     typeContainsFunctions (dict_get "SNH: nameContainsFunction" name env).type_
 
                 definedMutables =
-                    List.filter .mutable definitions
+                    stats
+                        |> List.filterMap statementAsDefinition
+                        |> List.filter .mutable
 
                 mutablesWithFunction =
                     List.filter defContainsFunctions definedMutables
@@ -1064,7 +1112,7 @@ inspectStatementRec stats returnType env subs =
             inspectStatementRec statsTail ty env1 subs1
 
 
-insertDefinition : CA.ValueDef -> Env -> TR Env
+insertDefinition : CA.LocalValueDef -> Env -> TR Env
 insertDefinition def env =
     let
         varNames =
@@ -1109,22 +1157,23 @@ insertDefinition def env =
                             |> TyGen.wrap
 
             Nothing ->
-                let
-                    insert_nr varName e =
-                        TyGen.do newName <| \typeName ->
-                        e
-                            |> Dict.insert varName
-                                { type_ = CA.TypeVariable todoPos typeName
-                                , forall = Set.singleton typeName
-                                , mutable = def.mutable
-                                }
-                            |> Ok
-                            |> TyGen.wrap
-                in
-                list_foldl_nr insert_nr (Set.toList varNames) env
+                list_foldl_nr (insertVariableWithGeneratedType todoPos def.mutable) (Set.toList varNames) env
 
 
-statementAsDefinition : CA.Statement -> Maybe CA.ValueDef
+insertVariableWithGeneratedType : CA.Pos -> Bool -> String -> Env -> TR Env
+insertVariableWithGeneratedType pos mutable name env =
+    TyGen.do newName <| \typeName ->
+    env
+        |> Dict.insert name
+            { type_ = CA.TypeVariable pos typeName
+            , forall = Set.singleton typeName
+            , mutable = mutable
+            }
+        |> Ok
+        |> TyGen.wrap
+
+
+statementAsDefinition : CA.Statement -> Maybe CA.LocalValueDef
 statementAsDefinition stat =
     case stat of
         CA.Definition d ->
@@ -1202,7 +1251,7 @@ typeContainsFunctions ty =
 --
 
 
-findAllRefs_definition : CA.ValueDef -> Set String
+findAllRefs_definition : CA.LocalValueDef -> Set String
 findAllRefs_definition def =
     List.foldl (\stat -> Set.union (findAllRefs_statement stat)) Set.empty def.body
 
@@ -1273,7 +1322,7 @@ findAllRefs_statementBlock statements =
 
 {-| TODO move this outr of this module
 -}
-reorderStatements : List CA.Statement -> ( List CA.ValueDef, List CA.Statement )
+reorderStatements : List CA.Statement -> ( List CA.LocalValueDef, List CA.Statement )
 reorderStatements stats =
     let
         definitionOrStatement stat =
@@ -1300,7 +1349,7 @@ reorderStatements stats =
                 Dict.empty
                 indexedDefs
 
-        findAllIndexes : ( Int, CA.ValueDef ) -> Set Int
+        findAllIndexes : ( Int, CA.LocalValueDef ) -> Set Int
         findAllIndexes ( index, def ) =
             def
                 |> findAllRefs_definition
