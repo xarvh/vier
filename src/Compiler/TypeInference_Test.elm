@@ -433,6 +433,12 @@ variableTypes =
                           a False
                         """
             }
+        {- OBSOLETE
+
+        Since now we allow mutual recursion only across root lambda definitions, these tests are obsolete.
+
+        If at a later time we decide that non-root functions can be mutually recursive we'll possibly restore these.
+
         , simpleTest
             {-
                https://stackoverflow.com/questions/900585/why-are-functions-in-ocaml-f-not-recursive-by-default/904715#904715
@@ -480,6 +486,7 @@ variableTypes =
                         """
             , expected = Ok { type_ = tyNumber, forall = Set.empty, mutable = False }
             }
+        -}
 
         -- TODO Test self recursion and mutual recursion
         , codeTest "[reg] statements, assignments, free vars"
@@ -618,7 +625,7 @@ mutability =
         , hasError
             { name = "Functions can't be mutable 1"
             , run = \_ -> infer "a" "a @= fn x = x"
-            , test = Test.errorShouldContain "these mutable values contain functions: Test.a"
+            , test = Test.errorShouldContain "mutable"
             }
         , simpleTest
             { name = "Functions can't be mutable 2"
@@ -642,8 +649,8 @@ mutability =
                 \_ ->
                     infer "a"
                         """
-                        f @: Int -> Int
-                        f @= add 1
+                        a @: Number -> Number
+                        a @= add 1
                         """
             , test = Test.errorShouldContain "mutable"
             }
