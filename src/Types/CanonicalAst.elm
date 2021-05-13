@@ -311,6 +311,7 @@ type Fold
     | FoldType Type
     | FoldPattern Pattern
     | FoldMutParam String
+    | FoldRootValueDef RootValueDef
 
 
 extensionFold_module : (Fold -> ( Pos, acc ) -> ( Pos, acc )) -> ( AllDefs, acc ) -> ( AllDefs, acc )
@@ -349,14 +350,17 @@ extensionFold_rootValueDef f ( def, acc0 ) =
 
                 Just ty ->
                     extensionFold_type f ( ty, acc1 ) |> Tuple.mapFirst Just
+
+        ( b_pos, acc3 ) =
+            f (FoldRootValueDef def) (def.pos, acc2)
     in
     ( { name = def.name
-      , pos = def.pos
+      , pos = b_pos
       , isNative = def.isNative
       , maybeAnnotation = b_ann
       , body = b_body
       }
-    , acc2
+    , acc3
     )
 
 

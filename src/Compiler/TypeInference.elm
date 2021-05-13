@@ -183,7 +183,6 @@ inspectModule prelude mod =
         |> Tuple.first
 
 
-
 insertRootValue : CA.RootValueDef -> Env -> TR Env
 insertRootValue rootDef env =
     case rootDef.maybeAnnotation of
@@ -191,18 +190,20 @@ insertRootValue rootDef env =
             insertVariableWithGeneratedType todoPos False rootDef.name env
 
         Just annotation ->
-            env
-                |> Dict.insert rootDef.name
-                    { type_ = annotation
-                    , forall = typeVarsFromType annotation
-                    , mutable = False
-                    }
-                |> Ok
-                |> TyGen.wrap
+            case validateType False annotation of
+                Just err ->
+                    errorTodo err
+                        |> TyGen.wrap
 
-
-
-
+                Nothing ->
+                    env
+                        |> Dict.insert rootDef.name
+                            { type_ = annotation
+                            , forall = typeVarsFromType annotation
+                            , mutable = False
+                            }
+                        |> Ok
+                        |> TyGen.wrap
 
 
 addConstructors : CA.RootDef -> Env -> Res Env
