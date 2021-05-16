@@ -333,6 +333,30 @@ statements =
                 """
             , expected = Ok { type_ = tyNone, forall = Set.empty, mutable = False }
             }
+        , codeTest "Local values can't shadow root values"
+            """
+            a = 1
+            b =
+              a = 1
+              a
+            """
+            (infer "b")
+            (Test.errContain "already")
+        , codeTest "Prevent local redeclarations"
+            """
+            b =
+              a = 1
+              a = 1
+            """
+            (infer "b")
+            (Test.errContain "declar")
+        , codeTest "Prevent root redeclarations"
+            """
+            a = 1
+            a = 1
+            """
+            (infer "b")
+            (Test.errContain "declar")
         ]
 
 
@@ -433,61 +457,61 @@ variableTypes =
                           a False
                         """
             }
+
         {- OBSOLETE
 
-        Since now we allow mutual recursion only across root lambda definitions, these tests are obsolete.
+           Since now we allow mutual recursion only across root lambda definitions, these tests are obsolete.
 
-        If at a later time we decide that non-root functions can be mutually recursive we'll possibly restore these.
+           If at a later time we decide that non-root functions can be mutually recursive we'll possibly restore these.
 
-        , simpleTest
-            {-
-               https://stackoverflow.com/questions/900585/why-are-functions-in-ocaml-f-not-recursive-by-default/904715#904715
+           , simpleTest
+               {-
+                  https://stackoverflow.com/questions/900585/why-are-functions-in-ocaml-f-not-recursive-by-default/904715#904715
 
-               This error happens only when the identity function (`b`) follows alphabetically
-               the definition that references it.
-               Just to be sure, I've added another test below that is identical to this one
-               with the only difference that `a` is renamed to `c`, and it passes.
+                  This error happens only when the identity function (`b`) follows alphabetically
+                  the definition that references it.
+                  Just to be sure, I've added another test below that is identical to this one
+                  with the only difference that `a` is renamed to `c`, and it passes.
 
-               Ok, per test #3, the problem is in the statements order.
-            -}
-            { name = "[reg] `a` was variable type instead than number"
-            , run =
-                \_ ->
-                    infer "a"
-                        """
-                        b x = x
-                        a = b 1
-                        """
-            , expected = Ok { type_ = tyNumber, forall = Set.empty, mutable = False }
-            }
-        , simpleTest
-            -- See note for the test above!
-            { name = "[reg] make sure that `c` works"
-            , run =
-                \_ ->
-                    infer "c"
-                        """
-                        b x = x
-                        c = b 1
-                        """
-            , expected = Ok { type_ = tyNumber, forall = Set.empty, mutable = False }
-            }
-        , simpleTest
-            -- See note for the test above!
-            { name = "[reg] it's in the declaration order!"
-            , run =
-                \_ ->
-                    infer "q"
-                        """
-                        q =
-                          a = b 1
-                          b x = x
-                          a
-                        """
-            , expected = Ok { type_ = tyNumber, forall = Set.empty, mutable = False }
-            }
+                  Ok, per test #3, the problem is in the statements order.
+               -}
+               { name = "[reg] `a` was variable type instead than number"
+               , run =
+                   \_ ->
+                       infer "a"
+                           """
+                           b x = x
+                           a = b 1
+                           """
+               , expected = Ok { type_ = tyNumber, forall = Set.empty, mutable = False }
+               }
+           , simpleTest
+               -- See note for the test above!
+               { name = "[reg] make sure that `c` works"
+               , run =
+                   \_ ->
+                       infer "c"
+                           """
+                           b x = x
+                           c = b 1
+                           """
+               , expected = Ok { type_ = tyNumber, forall = Set.empty, mutable = False }
+               }
+           , simpleTest
+               -- See note for the test above!
+               { name = "[reg] it's in the declaration order!"
+               , run =
+                   \_ ->
+                       infer "q"
+                           """
+                           q =
+                             a = b 1
+                             b x = x
+                             a
+                           """
+               , expected = Ok { type_ = tyNumber, forall = Set.empty, mutable = False }
+               }
         -}
-
         -- TODO Test self recursion and mutual recursion
         , codeTest "[reg] statements, assignments, free vars"
             """
