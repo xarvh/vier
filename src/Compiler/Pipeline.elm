@@ -4,12 +4,18 @@ import Compiler.FormattableToCanonicalAst
 import Compiler.ScopeCheck
 import Compiler.StringToTokens
 import Compiler.TokensToFormattableAst
+import Dict exposing (Dict)
 import Types.CanonicalAst as CA
 import Types.Error exposing (Res)
 import Types.FormattableAst as FA
 import Types.Meta exposing (Meta)
 import Types.Token exposing (Token)
 
+
+
+----
+--- Single Modules
+--
 
 andThenMapError : (e -> f) -> (a -> Result e b) -> Result f a -> Result f b
 andThenMapError transformError f =
@@ -41,7 +47,7 @@ stringToCanonicalAst meta moduleName code =
     code
         |> stringToFormattableAst moduleName
         |> Result.andThen (\fa -> Compiler.FormattableToCanonicalAst.translateModule ro fa Dict.empty)
-        |> Result.andThen (\ca -> Compiler.ScopeCheck.onModule meta >> Result.map (always ca))
+        |> Result.andThen (\ca -> Compiler.ScopeCheck.onModule meta ca |> Result.map (always ca))
 
 
 

@@ -42,7 +42,8 @@ stringToCanonicalModuleWithPos : String -> Res CA.AllDefs
 stringToCanonicalModuleWithPos code =
     code
         |> unindent
-        |> (\c -> Compiler.Pipeline.stringToCanonicalAst meta moduleName c Prelude.prelude)
+        |> (\c -> Compiler.Pipeline.stringToCanonicalAst meta moduleName c)
+        |> Result.map (Dict.union Prelude.prelude)
         |> Result.andThen Compiler.ApplyAliases.applyAliasesToModule
 
 

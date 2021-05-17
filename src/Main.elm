@@ -660,7 +660,8 @@ viewProgram model =
             else
                 code
                     |> Compiler.TestHelpers.unindent
-                    |> (\fa -> Compiler.Pipeline.stringToCanonicalAst meta fileName fa acc)
+                    |> (\fa -> Compiler.Pipeline.stringToCanonicalAst meta fileName fa)
+                    |> Result.map (Dict.union acc)
                     |> Compiler.TestHelpers.resErrorToString
 
         emitModule : TI.Substitutions -> CA.AllDefs -> Result x String

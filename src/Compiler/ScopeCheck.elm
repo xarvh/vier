@@ -50,10 +50,10 @@ doTheShadowing : ReadOnly -> CA.Pattern -> Env -> Out -> DoTheShadowingOut
 doTheShadowing ro pa env out =
     let
         names =
-            CA.patternNames
+            CA.patternNames pa
 
         shadowedGlobals =
-            intersectAndPair names ro.metal.globals
+            intersectAndPair names ro.meta.globalValues
 
         shadowedRoot =
             intersectAndPair names ro.rootNames
@@ -63,10 +63,10 @@ doTheShadowing ro pa env out =
     in
     if shadowedGlobals /= Dict.empty || shadowedRoot /= Dict.empty || shadowedLocals /= Dict.empty then
         Dict.empty
-            |> Dict.union (Dict.map (\k v -> globalPos) shadowedGlobals)
+            |> Dict.union (Dict.map (\k -> Tuple.mapSecond (always globalPos)) shadowedGlobals)
             |> Dict.union shadowedRoot
             |> Dict.union shadowedLocals
-            |> Dict.values
+            |> Dict.toList
             |> (\new -> { out | shadowing = out.shadowing ++ new })
             |> ShadowingFound
 
@@ -106,8 +106,9 @@ onModule meta allDefs =
             CA.split allDefs
 
         names =
-            Dict.foldl (\k vdef -> Dict.insert vdef.localName vdef) Dict.empty values
+            Dict.foldl (\k vdef -> Dict.insert vdef.localName vdef.pos) Dict.empty values
 
+        ro : ReadOnly
         ro =
             { meta = meta
             , rootNames = names
@@ -119,7 +120,9 @@ onModule meta allDefs =
             }
 
         { dependencies, shadowing } =
-            onBlock ro Dict.empty
+            values
+                |> Dict.values
+                |> List.foldl (\vdef -> onBlock ro Dict.empty vdef.body) init
 
         -- TODO : check also dependencies and type variables used in aliases and unions
     in
@@ -134,10 +137,9 @@ onModule meta allDefs =
 
 
 errorShadowing : ( String, ( CA.Pos, CA.Pos ) ) -> Error.Error
-errorShadowing ( varName, ( first, second ) ) =
+errorShadowing ( varName, ( second, first ) ) =
     if first == globalPos then
-        ""
-            Error.makeError
+        Error.makeError
             second.n
             [ Error.showLines second.c 2 second.s
             , Error.text <| "the variable name " ++ varName ++ " is used already by a global value"
@@ -174,18 +176,29 @@ onStatement ro stat ( env, out ) =
 
                 EnvUpdated env1 ->
                     ( env1
-                    , onBlock ro env1 def.block out
+                    , onBlock ro env1 def.body out
                     )
 
         CA.Evaluation expr ->
-            onExpr ro env expr out
+            ( env
+            , onExpr ro env expr out
+            )
 
 
 onExpr : ReadOnly -> Env -> CA.Expression -> Out -> Out
 onExpr ro env expression out =
     case expression of
         CA.Lambda pos param body ->
-            case doTheShadowing ro param env out of
+            let
+                pattern =
+                    case param of
+                        CA.ParameterPattern pa ->
+                            pa
+
+                        CA.ParameterMutable po n ->
+                            CA.PatternAny po n
+            in
+            case doTheShadowing ro pattern env out of
                 ShadowingFound out1 ->
                     -- Stop here so that redundant errors won't pile up
                     out1
@@ -203,7 +216,7 @@ onExpr ro env expression out =
             let
                 out1 =
                     ext
-                        |> Maybe.map (\v -> doTheDependency ro env v out)
+                        |> Maybe.map (\v -> doTheDependency ro env pos v out)
                         |> Maybe.withDefault out
 
                 out2 =
