@@ -4,7 +4,6 @@ import Compiler.CoreModule as Core
 import Dict exposing (Dict)
 import Lib
 import SepList exposing (SepList)
-import Set exposing (Set)
 import Types.Binop as Binop exposing (Binop)
 import Types.CanonicalAst as CA
 import Types.Error as Error exposing (Res, errorTodo)
@@ -25,7 +24,7 @@ import Types.Token as Token
 -}
 type alias Env =
     { maybeUpdateTarget : Maybe CA.VariableArgs
-    , nonRootValues : Set String
+    , nonRootValues : Dict String CA.Pos
     , ro : ReadOnly
     }
 
@@ -40,7 +39,7 @@ type alias ReadOnly =
 initEnv : ReadOnly -> Env
 initEnv ro =
     { maybeUpdateTarget = Nothing
-    , nonRootValues = Set.empty
+    , nonRootValues = Dict.empty
     , ro = ro
     }
 
@@ -115,8 +114,10 @@ insertRootStatement ro faStatement caModule =
                             caName =
                                 makeRootName ro.currentModule defName
 
+                            rootDef : CA.RootValueDef
                             rootDef =
                                 { name = caName
+                                , localName = defName
                                 , pos = caPos
                                 , maybeAnnotation = localDef.maybeAnnotation
                                 , isNative = False
@@ -436,14 +437,14 @@ stringToStructuredName env pos rawString =
 -}
 
 
-insertParamNames : CA.Parameter -> Set String -> Set String
+insertParamNames : CA.Parameter -> Dict String CA.Pos -> Dict String CA.Pos
 insertParamNames param =
     case param of
         CA.ParameterMutable pos n ->
-            Set.insert n
+            Dict.insert n pos
 
         CA.ParameterPattern pa ->
-            CA.patternNames pa |> Set.union
+            CA.patternNames pa |> Dict.union
 
 
 translateDefinition : Bool -> Env -> FA.ValueDef -> Res CA.LocalValueDef
@@ -465,7 +466,7 @@ translateDefinition isRoot env fa =
                 env.nonRootValues
 
             else
-                Set.union (CA.patternNames namePattern) env.nonRootValues
+                Dict.union (CA.patternNames namePattern) env.nonRootValues
 
         localEnv =
             { env | nonRootValues = List.foldl insertParamNames nonRootValues1 params }
@@ -689,7 +690,7 @@ translatePatternOrFunction env fa =
 --
 
 
-insertDefinedNames : Env -> FA.Statement -> Set String -> Set String
+insertDefinedNames : Env -> FA.Statement -> Dict String CA.Pos -> Dict String CA.Pos
 insertDefinedNames env stat names =
     case stat of
         FA.Definition fa ->
@@ -699,10 +700,10 @@ insertDefinedNames env stat names =
                     names
 
                 Ok (POF_Pattern caPattern) ->
-                    Set.union names (CA.patternNames caPattern)
+                    Dict.union names (CA.patternNames caPattern)
 
                 Ok (POF_Function fnName fnArgs) ->
-                    Set.insert fnName names
+                    Dict.insert fnName todoPos names
 
         _ ->
             names
@@ -772,7 +773,7 @@ translateExpression env faExpr =
                                 ( a.name, a.mod, [] )
 
                     declaredInsideFunction =
-                        Set.member name env.nonRootValues
+                        Dict.member name env.nonRootValues
                 in
                 { isRoot = not declaredInsideFunction
                 , name = resolveValueName env.ro declaredInsideFunction mod name
@@ -857,7 +858,7 @@ translateExpression env faExpr =
             let
                 translatePatternAndStatements ( faPattern, faStatements ) =
                     do (translatePattern env faPattern) <| \caPattern ->
-                    do (translateStatementBlock { env | nonRootValues = Set.union (CA.patternNames caPattern) env.nonRootValues } faStatements) <| \block ->
+                    do (translateStatementBlock { env | nonRootValues = Dict.union (CA.patternNames caPattern) env.nonRootValues } faStatements) <| \block ->
                     Ok ( caPattern, block )
             in
             Result.map3
@@ -916,7 +917,7 @@ translateAttrsRec env faAttrs caAttrsAccum =
                         Nothing ->
                             let
                                 declaredInsideFunction =
-                                    Set.member attrName env.nonRootValues
+                                    Dict.member attrName env.nonRootValues
                             in
                             { name = resolveValueName env.ro declaredInsideFunction NotSpecified attrName
                             , isRoot = not declaredInsideFunction
@@ -939,7 +940,7 @@ translateArgument env faExpr =
                     errorTodo "constructors can't be mutable?"
 
                 StructuredName_Value { name, mod, attrPath } ->
-                    if mod == NotSpecified && Set.member name env.nonRootValues then
+                    if mod == NotSpecified && Dict.member name env.nonRootValues then
                         { isRoot = False
                         , name = name
                         , attrPath = attrPath

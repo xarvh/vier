@@ -228,6 +228,7 @@ lists =
                             )
                     , isNative = False
                     , name = "Test.l"
+                    , localName = "l"
                     , pos = p
                     }
             }
@@ -300,6 +301,7 @@ tuples =
                                 )
                             )
                     , name = "Test.a"
+                    , localName = "a"
                     , isNative = False
                     , pos = p
                     }

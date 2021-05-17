@@ -9,7 +9,6 @@ module Types.CanonicalAst exposing (..)
 -}
 
 import Dict exposing (Dict)
-import Set exposing (Set)
 import Types.Literal
 
 
@@ -69,6 +68,7 @@ type alias UnionDef =
 
 type alias RootValueDef =
     { name : String
+    , localName : String
     , pos : Pos
     , maybeAnnotation : Maybe Type
     , isNative : Bool
@@ -170,23 +170,23 @@ type Pattern
     | PatternRecord Pos (Dict String Pattern)
 
 
-patternNames : Pattern -> Set String
+patternNames : Pattern -> Dict String Pos
 patternNames p =
     case p of
         PatternDiscard pos ->
-            Set.empty
+            Dict.empty
 
         PatternAny pos n ->
-            Set.singleton n
+            Dict.singleton n pos
 
         PatternLiteral pos _ ->
-            Set.empty
+            Dict.empty
 
         PatternConstructor pos path ps ->
-            List.foldl (patternNames >> Set.union) Set.empty ps
+            List.foldl (patternNames >> Dict.union) Dict.empty ps
 
         PatternRecord pos ps ->
-            Dict.foldl (\k -> patternNames >> Set.union) Set.empty ps
+            Dict.foldl (\k -> patternNames >> Dict.union) Dict.empty ps
 
 
 patternPos : Pattern -> Pos
@@ -352,9 +352,10 @@ extensionFold_rootValueDef f ( def, acc0 ) =
                     extensionFold_type f ( ty, acc1 ) |> Tuple.mapFirst Just
 
         ( b_pos, acc3 ) =
-            f (FoldRootValueDef def) (def.pos, acc2)
+            f (FoldRootValueDef def) ( def.pos, acc2 )
     in
     ( { name = def.name
+      , localName = def.localName
       , pos = b_pos
       , isNative = def.isNative
       , maybeAnnotation = b_ann

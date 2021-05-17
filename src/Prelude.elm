@@ -113,6 +113,7 @@ prelude =
 insertBinop : String -> Binop -> CA.AllDefs -> CA.AllDefs
 insertBinop _ b =
     { name = b.symbol
+    , localName = b.symbol
     , pos = pos
     , isNative = True
     , body = []
@@ -122,9 +123,14 @@ insertBinop _ b =
         |> Dict.insert b.symbol
 
 
-insertFunction : ( String, CA.Type ) -> CA.AllDefs -> CA.AllDefs
-insertFunction ( name, ty ) =
+insertFunction : ( String, String, CA.Type ) -> CA.AllDefs -> CA.AllDefs
+insertFunction ( moduleName, localName, ty ) =
+    let
+        name =
+            moduleName ++ "." ++ localName
+    in
     { name = name
+    , localName = localName
     , pos = pos
     , isNative = True
     , body = []
@@ -394,7 +400,7 @@ sendLeft =
 --
 
 
-functions : List ( String, CA.Type )
+functions : List ( String, String, CA.Type )
 functions =
     [ debugTodo
     , debugLog
@@ -405,16 +411,18 @@ functions =
 -- SPCore/Debug
 
 
-debugTodo : ( String, CA.Type )
+debugTodo : ( String, String, CA.Type )
 debugTodo =
-    ( "SPCore/Debug.todo"
+    ( "SPCore/Debug"
+    , "todo"
     , tyFun Core.textType (tyVar "a")
     )
 
 
-debugLog : ( String, CA.Type )
+debugLog : ( String, String, CA.Type )
 debugLog =
-    ( "SPCore/Debug.log"
+    ( "SPCore/Debug"
+    , "log"
     , tyFun Core.textType
         (tyFun (tyVar "a") (tyVar "a"))
     )

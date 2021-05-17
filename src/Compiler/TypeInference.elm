@@ -571,7 +571,7 @@ literalToType l =
             Core.charType
 
 
-generalize : Set Name -> Env -> Type -> Set Name
+generalize : Dict Name CA.Pos -> Env -> Type -> Set Name
 generalize names env ty =
     let
         tyvarsFromEnv : Set Name
@@ -580,7 +580,7 @@ generalize names env ty =
 
         addEnvTvar k schema acc =
             -- don't add the value's own tyvars!
-            if Set.member k names then
+            if Dict.member k names then
                 acc
 
             else
@@ -905,7 +905,7 @@ insertVariableFromDefinition pos mutable maybeAnnotation name ty ( env, subs ) =
                 Set.empty
 
             else
-                generalize (Set.singleton name) (refineEnv subs2 env) refinedType
+                generalize (Dict.singleton name pos) (refineEnv subs2 env) refinedType
 
         scheme : EnvEntry
         scheme =
@@ -1068,7 +1068,7 @@ inspectBlock stats parentEnv subs =
                 defContainsFunctions def =
                     def.pattern
                         |> CA.patternNames
-                        |> Set.toList
+                        |> Dict.keys
                         |> List.any nameContainsFunction
 
                 nameContainsFunction name =
@@ -1084,8 +1084,8 @@ inspectBlock stats parentEnv subs =
             in
             if mutablesWithFunction /= [] then
                 mutablesWithFunction
-                    |> List.foldl (.pattern >> CA.patternNames >> Set.union) Set.empty
-                    |> Set.toList
+                    |> List.foldl (.pattern >> CA.patternNames >> Dict.union) Dict.empty
+                    |> Dict.keys
                     |> List.sort
                     |> String.join ", "
                     |> (++) "these mutable values contain functions: "
@@ -1118,11 +1118,12 @@ insertDefinition def env =
             CA.patternNames def.pattern
 
         duplicates =
-            Set.filter (\name -> Dict.member name env) varNames
+            Dict.filter (\name value -> Dict.member name env) varNames
     in
-    if duplicates /= Set.empty then
+    if duplicates /= Dict.empty then
+        -- TODO remove this since it's done in Scope
         duplicates
-            |> Set.toList
+            |> Dict.keys
             |> List.sort
             |> String.join ", "
             |> (\s -> s ++ " already declared in scope!")
@@ -1140,7 +1141,7 @@ insertDefinition def env =
 
                     Nothing ->
                         let
-                            insert varName =
+                            insert varName varPos =
                                 Dict.insert varName
                                     -- TODO do we need to generalize the type?
                                     { type_ = annotation
@@ -1151,12 +1152,12 @@ insertDefinition def env =
                                     }
                         in
                         varNames
-                            |> Set.foldl insert env
+                            |> Dict.foldl insert env
                             |> Ok
                             |> TyGen.wrap
 
             Nothing ->
-                list_foldl_nr (insertVariableWithGeneratedType todoPos def.mutable) (Set.toList varNames) env
+                list_foldl_nr (insertVariableWithGeneratedType todoPos def.mutable) (Dict.keys varNames) env
 
 
 insertVariableWithGeneratedType : CA.Pos -> Bool -> String -> Env -> TR Env
@@ -1344,7 +1345,7 @@ reorderStatements stats =
 
         indexByName =
             List.foldl
-                (\( index, def ) dict -> Set.foldl (\name -> Dict.insert name index) dict (CA.patternNames def.pattern))
+                (\( index, def ) dict -> Dict.foldl (\name pos -> Dict.insert name index) dict (CA.patternNames def.pattern))
                 Dict.empty
                 indexedDefs
 

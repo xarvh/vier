@@ -267,7 +267,7 @@ pickMainName pattern =
             _ ->
                 pattern
                     |> CA.patternNames
-                    |> Set.toList
+                    |> Dict.keys
                     |> List.head
                     |> Maybe.map ((++) "$$")
 
@@ -282,7 +282,7 @@ getValueDefName : CA.LocalValueDef -> String
 getValueDefName def =
     def.pattern
         |> CA.patternNames
-        |> Set.toList
+        |> Dict.keys
         |> List.head
         |> Maybe.withDefault "BLARGH"
 
@@ -348,11 +348,6 @@ translateAll subs ca =
                 |> List.concatMap (CA.rootToLocalDef >> translateValueDef env >> Tuple.first)
     in
     nativeBinopsAsFns ++ cons ++ vals
-
-
-
-
-
 
 
 translateValueDef : Env -> CA.LocalValueDef -> ( List JA.Statement, Env )

@@ -42,7 +42,7 @@ import Types.Token as Token exposing (Token)
 
 runTests =
     False
---         || True
+        || True
 
 
 initialFiles =
