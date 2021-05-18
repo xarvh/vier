@@ -247,7 +247,22 @@ onExpr ro env expression out =
                 |> List.foldl (onBlock ro env) out
 
         CA.Try pos expr pas ->
-            Debug.todo "ScopeCheck CA.Try NI"
+            let
+                out1 =
+                    onExpr ro env expr out
+
+                doPattern ( pattern, block ) outX =
+                    case doTheShadowing ro pattern env outX of
+                        ShadowingFound outX1 ->
+                            outX1
+
+                        EnvUpdated env1 ->
+                            onBlock ro env1 block outX
+
+                out2 =
+                    List.foldl doPattern out1 pas
+            in
+            out2
 
 
 {-| I assume this function is faster if the 1st dict is smaller than the 2nd one, so I name them accordingly
