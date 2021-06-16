@@ -831,6 +831,13 @@ inspectArgument env arg ty subs =
 
 inspectStatement : CA.Statement -> Env -> Substitutions -> TR ( Type, Env, Substitutions )
 inspectStatement statement env subs =
+    let
+         _ = (statement, ())
+            |> CA.extensionFold_statement (\_ _ -> (todoPos, ()))
+            |> Tuple.first
+            |> Debug.log "========================================================="
+
+    in
     case statement of
         CA.Evaluation expr ->
             TyGen.do (newType todoPos) <| \nt ->
