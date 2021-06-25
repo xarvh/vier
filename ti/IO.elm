@@ -34,6 +34,26 @@ newId =
     Wrapper (\state -> ( state, state + 1 ))
 
 
+list_foldl : (item -> acc -> IO acc) -> List item -> acc -> IO acc
+list_foldl f ls acc =
+    case ls of
+        [] ->
+            return acc
+
+        head :: tail ->
+            do (f head acc) <| list_foldl f tail
+
+
+list_map : (a -> IO b) -> List a -> IO (List b)
+list_map f ls =
+    let
+        fio item acc =
+            do (f item) <| \b ->
+            return (b :: acc)
+    in
+    do (list_foldl fio ls []) <| (List.reverse >> return)
+
+
 indexedMap_list : (Int -> a -> IO b) -> List a -> IO (List b)
 indexedMap_list f ls =
     do (indexedMap_listRec f 0 [] ls) <| (List.reverse >> return)

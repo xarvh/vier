@@ -1,13 +1,14 @@
 module Pattern exposing (..)
 
 import CanonicalAst as CA exposing (Name, Pos)
-import Constraint exposing (Constraint, Type(..))
+import Constraint exposing (Constraint)
 import Dict exposing (Dict)
 import IO exposing (IO)
+import Type exposing (Type)
 
 
 type alias Acc =
-    { headers : Dict Name (CA.At Constraint.Type)
+    { headers : Dict Name (CA.At Type)
     , typeVariables : List CA.TyVarRef
     , reversedConstraints : List Constraint
     }
@@ -26,7 +27,7 @@ extractType expectation =
 --
 
 
-add : CA.Pattern -> Constraint.PatternExpected Constraint.Type -> Acc -> IO Acc
+add : CA.Pattern -> Constraint.PatternExpected Type -> Acc -> IO Acc
 add (CA.At pos pattern) expectation acc =
     case pattern of
         CA.PatternAnything ->
@@ -118,7 +119,7 @@ addConstructor pos params expectation acc0 =
     let
         instanceFlexVar : Name -> IO ( Name, CA.TyVarRef )
         instanceFlexVar unionVarName =
-            IO.do (nameToFlex unionVarName) <| \flex ->
+            IO.do (Type.nameToFlex unionVarName) <| \flex ->
             IO.return
                 ( unionVarName
                 , flex
@@ -127,7 +128,7 @@ addConstructor pos params expectation acc0 =
     IO.do (IO.list_map instanceFlexVar params.union.vars) <| \varPairs ->
     let
         typePairs =
-            List.map (Tuple.mapSecond VarN) varPairs
+            List.map (Tuple.mapSecond Type.VarN) varPairs
 
         freeVarDict =
             Dict.fromList typePairs
@@ -142,7 +143,7 @@ addConstructor pos params expectation acc0 =
 
         constructorConstraint : Constraint
         constructorConstraint =
-            Constraint.Pattern pos (E.PCtor params.name) constructorType expectation
+            Constraint.Pattern pos (Constraint.PatternCategory_Constructor params.name) constructorType expectation
     in
     IO.return
         { headers = acc1.headers

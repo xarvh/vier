@@ -1,27 +1,8 @@
 module Constraint exposing (..)
 
 import CanonicalAst as CA exposing (At, Name, Pos)
+import Type exposing (Type)
 
-
-type alias TypeVariable =
-    Int
-
-
-{-| TODO why do we need both this and CA.Type?
--}
-type
-    Type
-    {-
-       = PlaceHolder Name.Name
-       | AliasN ModuleName.Canonical Name.Name [(Name.Name, Type)] Type
-       | EmptyRecordN
-       | RecordN (Map.Map Name.Name Type) Type
-       | UnitN
-       | TupleN Type Type (Maybe Type)
-    -}
-    = VarN CA.TyVarRef
-    | AppN CA.ModuleName CA.Name (List Type)
-    | FunN Type Type
 
 
 
@@ -70,7 +51,7 @@ type PatternExpected ty
 
 
 type PatternCategory
-    = PatternCategory
+    = PatternCategory_Constructor Name
 
 
 type PatternContext
@@ -84,8 +65,6 @@ type PatternContext
 -- | TypedBody
 
 
-type RigidTypeVars
-    = Dict Name Type
 
 
 type Constraint
@@ -97,8 +76,8 @@ type Constraint
     | Pattern Pos PatternCategory Type (PatternExpected Type)
     | Equal Pos Category Type (Expected Type)
     | Let
-        { rigidVars : List TypeVariable
-        , flexVars : List TypeVariable
+        { rigidVars : List Type.Variable
+        , flexVars : List Type.Variable
 
         --, header : Map.Map Name.Name (A.Located Type)
         , headerCon : Constraint
@@ -106,7 +85,7 @@ type Constraint
         }
 
 
-exists : List TypeVariable -> Constraint -> Constraint
+exists : List Type.Variable -> Constraint -> Constraint
 exists flexVars constraint =
     --[] flexVars Map.empty constraint CTrue
     Let

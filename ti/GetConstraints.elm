@@ -1,19 +1,11 @@
 module GetConstraints exposing (..)
 
 import CanonicalAst as CA
-import Constraint exposing (Constraint, Expected, RigidTypeVars, Type(..))
+import Constraint exposing (Constraint, Expected, RigidTypeVars)
+import Type exposing (Type)
 import Dict exposing (Dict)
 import IO exposing (IO)
 import Pattern
-
-
-
--- Stuff that should NOT be in this module
-
-
-mkFlexVar : IO Constraint.TypeVariable
-mkFlexVar =
-    IO.newId
 
 
 
