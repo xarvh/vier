@@ -13,7 +13,7 @@ type alias Variable =
     Int
 
 
-{-| TODO why do we need both this and CA.Type?
+{-| This models the "type" used by the inference algorithm
 
          = PlaceHolder Name.Name
          | AliasN ModuleName.Canonical Name.Name [(Name.Name, Type)] Type

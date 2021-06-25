@@ -1,7 +1,7 @@
 module GetConstraints exposing (..)
 
-import CanonicalAst as CA
-import Constraint exposing (Constraint, Expected, RigidTypeVars)
+import CanonicalAst as CA exposing (Pos, Name)
+import Constraint exposing (Constraint, Expected)
 import Type exposing (Type)
 import Dict exposing (Dict)
 import IO exposing (IO)
@@ -13,7 +13,7 @@ import Pattern
 
 
 type alias ArgsAcc =
-    { vars : List Constraint.TypeVariable
+    { vars : List Type.Variable
     , ty : Type
     , result : Type
     , patternAcc : Pattern.Acc
@@ -22,7 +22,7 @@ type alias ArgsAcc =
 
 
 --
-
+type alias RigidTypeVars = Dict Name Type
 
 constrain : RigidTypeVars -> CA.Expression -> Expected Type -> IO.Constraint
 constrain rtv (CA.At pos expression) expected =

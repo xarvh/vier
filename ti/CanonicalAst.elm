@@ -128,5 +128,5 @@ type alias PatternCtorArg =
 
     -- CACHE for type inference
     , ty : Type
-    , arg : Pattern
+    , pattern : Pattern
     }

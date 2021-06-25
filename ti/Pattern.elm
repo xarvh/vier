@@ -18,7 +18,8 @@ extractType : Constraint.PatternExpected ty -> ty
 extractType expectation =
     case expectation of
         Constraint.PatternExpected_NoExpectation ty ->
-          ty
+            ty
+
         Constraint.PatternExpected_FromContext _ _ ty ->
             ty
 
@@ -40,12 +41,14 @@ add (CA.At pos pattern) expectation acc =
                         |> extractType
                         |> CA.At pos
             in
-            { add | headers = Dict.insert name constraint acc.headers }
+            { acc | headers = Dict.insert name constraint acc.headers }
                 |> IO.return
 
         CA.PatternConstructor params ->
             addConstructor pos params expectation acc
 
+        _ ->
+          Debug.todo "Pattern.add"
 
 
 {-
@@ -133,13 +136,13 @@ addConstructor pos params expectation acc0 =
         freeVarDict =
             Dict.fromList typePairs
     in
-    IO.do (IO.list_foldl (addCtorArg pos params.ctorName freeVarDict) acc0 params.args) <| \acc1 ->
+    IO.do (IO.list_foldl (addCtorArg pos params.name freeVarDict) params.args acc0) <| \acc1 ->
     let
         constructorType : Type
         constructorType =
             typePairs
                 |> List.map Tuple.second
-                |> Type.AppN params.moduleName params.typeName
+                |> Type.AppN params.home params.typeName
 
         constructorConstraint : Constraint
         constructorConstraint =
@@ -147,18 +150,25 @@ addConstructor pos params expectation acc0 =
     in
     IO.return
         { headers = acc1.headers
-        , vars = List.map Tuple.second varPairs ++ acc1.vars
+        , typeVariables = List.map Tuple.second varPairs ++ acc1.typeVariables
         , reversedConstraints = constructorConstraint :: acc1.reversedConstraints
         }
 
 
+{-| TODO
+-}
+instantiate_fromSrcType : Dict Name Type -> CA.Type -> IO Type
+instantiate_fromSrcType freeVars caType =
+    Debug.todo "Type/Instantiate.hs"
+
+
 addCtorArg : Pos -> Name -> Dict Name Type -> CA.PatternCtorArg -> Acc -> IO Acc
-addCtorArg pos ctorName freeVarDict arg =
-    IO.do (Instantiate.fromSrcType freeVarDict arg.srcType) <| \ty ->
+addCtorArg pos ctorName freeVarDict arg acc =
+    IO.do (instantiate_fromSrcType freeVarDict arg.ty) <| \ty ->
     let
         expectation =
             Constraint.PatternExpected_FromContext pos
                 (Constraint.PatternContext_ConstructorArg ctorName arg.index)
                 ty
     in
-    add arg.pattern expectation
+    add arg.pattern expectation acc
