@@ -1,11 +1,11 @@
 module GetConstraints exposing (..)
 
-import CanonicalAst as CA exposing (Pos, Name)
+import CanonicalAst as CA exposing (Name, Pos)
 import Constraint exposing (Constraint, Expected)
-import Type exposing (Type)
 import Dict exposing (Dict)
 import IO exposing (IO)
 import Pattern
+import Type exposing (Type)
 
 
 
@@ -22,18 +22,22 @@ type alias ArgsAcc =
 
 
 --
-type alias RigidTypeVars = Dict Name Type
 
-constrain : RigidTypeVars -> CA.Expression -> Expected Type -> IO.Constraint
+
+type alias RigidTypeVars =
+    Dict Name Type
+
+
+constrain : RigidTypeVars -> CA.Expression -> Expected Type -> IO Constraint
 constrain rtv (CA.At pos expression) expected =
     case expression of
         CA.Variable args ->
             case args.annotation of
                 Just annotation ->
-                    IO.return <| Constraint.Foreign pos name annotation expected
+                    IO.return <| Constraint.Foreign pos args.name annotation expected
 
                 Nothing ->
-                    IO.return <| Constraint.Local pos name expected
+                    IO.return <| Constraint.Local pos args.name expected
 
         CA.Constructor moduleName name annotation ->
             IO.return <| Constraint.Foreign pos name annotation expected
@@ -48,111 +52,127 @@ constrain rtv (CA.At pos expression) expected =
             constrainLambda rtv pos args body expected
 
         CA.Call func args ->
-            constrainCall rtv region func args expected
+            constrainCall rtv pos func args expected
 
         CA.If branches finally ->
             constrainIf rtv pos branches finally expected
 
         CA.Try expr branches ->
-            constrainCase rtv region expr branches expected
+            constrainCase rtv pos expr branches expected
 
         CA.Let def body ->
-            constrainDef rtv def =<< constrain rtv body expected
+            IO.do (constrain rtv body expected) <| constrainDef rtv def
 
         --     CA.Update name expr fields ->
-        --       constrainUpdate rtv region name expr fields expected
+        --       constrainUpdate rtv pos name expr fields expected
         CA.Record fields ->
-            constrainRecord rtv region fields expected
+            constrainRecord rtv pos fields expected
 
 
 literalCategory : CA.Literal -> Constraint.Category
 literalCategory lit =
-    Constraint.CategoryLiteral
+    Constraint.Category_Literal
 
 
-literalType : CA.Literal -> Type
+literalType : CA.Literal -> CA.Type
 literalType lit =
-    CA.TypeConstant () "String" []
+    CA.TypeConstant "String" []
 
 
-constrainList : RigidTypeVars -> Pos -> List Expression -> Type -> IO Constraint
+constrainList : RigidTypeVars -> Pos -> List CA.Expression -> Constraint.Expected Type -> IO Constraint
 constrainList rtv pos items expected =
-    IO.do mkFlexVar <| \itemVar ->
+    IO.do Type.mkFlexVar <| \itemVar ->
     let
         itemType =
-            VarN itemVar
+            Type.VarN itemVar
 
         listType =
-            AppN ModuleName.list Name.list [ itemType ]
+            Type.AppN "SPCore/List" "List" [ itemType ]
     in
-    IO.do (IO.indexedMap_list (constrainListEntry rtv pos entryType) items) <| \itemCons ->
+    IO.do (IO.indexedMap_list (constrainListEntry rtv pos itemType) items) <| \itemCons ->
     [ Constraint.And itemCons
-    , Constraint.Equal region Constraint.CategoryList listType expected
+    , Constraint.Equal pos Constraint.Category_List listType expected
     ]
         |> Constraint.And
         |> Constraint.exists [ itemVar ]
         |> IO.return
 
 
-constrainListEntry : RigidTypeVars -> Pos -> Type -> Int -> Expression -> IO Constraint
+constrainListEntry : RigidTypeVars -> Pos -> Type -> Int -> CA.Expression -> IO Constraint
 constrainListEntry rtv pos tipe index expr =
     constrain rtv expr (Constraint.Expected_FromContext pos (Constraint.Context_ListEntry index) tipe)
 
 
-constrainLambda : RigidTypeVars -> Pos -> List CA.Pattern -> Expression -> Expected CA.Type -> IO Constraint
+constrainLambda : RigidTypeVars -> Pos -> List CA.Pattern -> CA.Expression -> Expected CA.Type -> IO Constraint
 constrainLambda rtv pos args body expected =
     IO.do (constrainArguments args) <| \argsAcc ->
-    let
-        (Pattern.Acc headers pvars revCons) =
-            argsAcc.patternAcc
-    in
-    IO.do (constrain rtv body (Constraint.Expected_NoExpectation argsAcc.resultType)) <| \bodyCon ->
+    IO.do (constrain rtv body (Constraint.Expected_NoExpectation argsAcc.result)) <| \bodyCon ->
     [ Constraint.Let
         { rigidVars = []
-        , flexVars = pvars
-        , header = headers
-        , headerCon = Constraint.And (List.reverse revCons)
+        , flexVars = argsAcc.patternAcc.typeVariables
+        , header = argsAcc.patternAcc.headers
+        , headerCon = Constraint.And (List.reverse argsAcc.patternAcc.reversedConstraints)
         , bodyCon = bodyCon
         }
     , Constraint.Equal pos Constraint.Category_Lambda argsAcc.ty expected
     ]
-        |> CAnd
+        |> Constraint.And
         |> Constraint.exists argsAcc.vars
         |> IO.return
 
 
 constrainArguments : List CA.Pattern -> IO ArgsAcc
 constrainArguments args =
-    constrainArgumentsRec args Pattern.emptyState
+    constrainArgumentsRec args Pattern.initAcc
 
 
 constrainArgumentsRec : List CA.Pattern -> Pattern.Acc -> IO ArgsAcc
-constrainArgumentsRec args state =
+constrainArgumentsRec args acc =
     case args of
         [] ->
-            IO.do mkFlexVar <| \resultVar ->
+            IO.do Type.mkFlexVar <| \resultVar ->
             let
                 resultType =
-                    VarN resultVar
+                    Type.VarN resultVar
             in
             IO.return
                 { vars = [ resultVar ]
                 , ty = resultType
                 , result = resultType
-                , state = state
+                , patternAcc = acc
                 }
 
         pattern :: otherArgs ->
-            IO.do mkFlexVar <| \argVar ->
+            IO.do Type.mkFlexVar <| \argVar ->
             let
                 argType =
-                    VarN argVar
+                    Type.VarN argVar
             in
-            IO.do (Pattern.add pattern (Constraint.Expected_NoExpectation argType) state) <| \updatedState ->
+            IO.do (Pattern.add pattern (Constraint.PatternExpected_NoExpectation argType) acc) <| \updatedState ->
             IO.do (constrainArgumentsRec otherArgs updatedState) <| \nextArgs ->
             IO.return
-                { vars = argVar :: nextArgs.vars
-                , ty = FunN argType nextArgs.ty
-                , result = nextArgs.result
-                , state = nextArgs.newState
+                { nextArgs
+                    | vars = argVar :: nextArgs.vars
+                    , ty = Type.FunN argType nextArgs.ty
                 }
+
+
+constrainRecord : RigidTypeVars -> Pos -> Dict Name CA.Expression -> Expected Type -> IO Constraint
+constrainRecord rtv pos fields expected =
+    Debug.todo ""
+
+
+constrainDef rtv def =
+    Debug.todo ""
+
+
+constrainCall rtv pos func args expected =
+    Debug.todo ""
+
+
+constrainIf rtv pos branches finally expected =
+    Debug.todo ""
+
+
+constrainCase rtv pos expr branches expected =
+    Debug.todo ""

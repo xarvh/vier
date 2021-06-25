@@ -1,5 +1,6 @@
 module Constraint exposing (..)
 
+import Dict exposing (Dict)
 import CanonicalAst as CA exposing (At, Name, Pos)
 import Type exposing (Type)
 
@@ -78,8 +79,7 @@ type Constraint
     | Let
         { rigidVars : List Type.Variable
         , flexVars : List Type.Variable
-
-        --, header : Map.Map Name.Name (A.Located Type)
+        , header : Dict Name (At Type)
         , headerCon : Constraint
         , bodyCon : Constraint
         }
@@ -87,12 +87,10 @@ type Constraint
 
 exists : List Type.Variable -> Constraint -> Constraint
 exists flexVars constraint =
-    --[] flexVars Map.empty constraint CTrue
     Let
         { rigidVars = []
         , flexVars = flexVars
-
-        --, header = Dict.empty
+        , header = Dict.empty
         , headerCon = constraint
         , bodyCon = True_
         }

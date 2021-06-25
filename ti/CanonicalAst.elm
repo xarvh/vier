@@ -78,8 +78,18 @@ type ExpressionRaw
     | List (List Expression)
     | If (List ( Expression, Expression )) Expression
     | Try Expression (List ( Pattern, Expression ))
-    | Let Name (Maybe Annotation) Expression
-    | Record (Maybe VariableArgs) (Dict String Expression)
+    | Let Def Expression
+    -- TODO record update
+    | Record (Dict String Expression)
+
+
+type alias Def =
+    { name : Name
+    , pos : Pos
+    , args : List Pattern
+    , body : Expression
+    }
+
 
 
 type alias VariableArgs =

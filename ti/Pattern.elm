@@ -14,6 +14,14 @@ type alias Acc =
     }
 
 
+initAcc : Acc
+initAcc =
+    { headers = Dict.empty
+    , typeVariables = []
+    , reversedConstraints = []
+    }
+
+
 extractType : Constraint.PatternExpected ty -> ty
 extractType expectation =
     case expectation of
@@ -48,7 +56,8 @@ add (CA.At pos pattern) expectation acc =
             addConstructor pos params expectation acc
 
         _ ->
-          Debug.todo "Pattern.add"
+            Debug.todo "Pattern.add"
+
 
 
 {-
