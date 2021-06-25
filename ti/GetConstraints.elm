@@ -162,31 +162,31 @@ constrainRecord rtv pos fields expected =
     IO.do (IO.dict_map (\name -> constrainRecordAttribute rtv) fields) <| \dict ->
     let
         recordType =
-            Type.RecordN (Dict.map .ty dict) Type.EmptyRecordN
+            Type.RecordN (Dict.map (always .ty) dict) Type.EmptyRecordN
 
         recordCon =
             Constraint.Equal pos Constraint.Category_Record recordType expected
 
         vars =
-            Dict.foldr (\r vs -> r.var :: vs) [] dict
+            Dict.foldr (\k r vs -> r.var :: vs) [] dict
 
         cons =
-            Dict.foldr (\r cs -> r.constraint :: cs) [ recordCon ] dict
+            Dict.foldr (\k r cs -> r.constraint :: cs) [ recordCon ] dict
     in
     cons
         |> Constraint.And
-        |> exists vars
+        |> Constraint.exists vars
         |> IO.return
 
 
-constrainRecordAttribute : RigidTypeVars -> CA.Expression -> IO { var : Variable, ty : Type, constraint : Constraint }
+constrainRecordAttribute : RigidTypeVars -> CA.Expression -> IO { var : Type.Variable, ty : Type, constraint : Constraint }
 constrainRecordAttribute rtv expression =
     IO.do Type.mkFlexVar <| \var ->
     let
         ty =
             Type.VarN var
     in
-    IO.do (constrain rtv expr (NoExpectation ty)) <| \con ->
+    IO.do (constrain rtv expression (Constraint.Expected_NoExpectation ty)) <| \con ->
     IO.return { var = var, ty = ty, constraint = con }
 
 

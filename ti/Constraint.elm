@@ -17,6 +17,7 @@ type Category
     = Category_Literal
     | Category_List
     | Category_Lambda
+    | Category_Record
 
 
 type Expected ty
