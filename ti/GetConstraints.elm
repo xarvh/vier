@@ -74,12 +74,12 @@ literalCategory lit =
     Constraint.Category_Literal
 
 
-literalType : CA.Literal -> CA.Type
+literalType : CA.Literal -> Type
 literalType lit =
-    CA.TypeConstant "String" []
+    Type.AppN "SPCore/String" "String" []
 
 
-constrainList : RigidTypeVars -> Pos -> List CA.Expression -> Constraint.Expected Type -> IO Constraint
+constrainList : RigidTypeVars -> Pos -> List CA.Expression -> Expected Type -> IO Constraint
 constrainList rtv pos items expected =
     IO.do Type.mkFlexVar <| \itemVar ->
     let
@@ -103,7 +103,7 @@ constrainListEntry rtv pos tipe index expr =
     constrain rtv expr (Constraint.Expected_FromContext pos (Constraint.Context_ListEntry index) tipe)
 
 
-constrainLambda : RigidTypeVars -> Pos -> List CA.Pattern -> CA.Expression -> Expected CA.Type -> IO Constraint
+constrainLambda : RigidTypeVars -> Pos -> List CA.Pattern -> CA.Expression -> Expected Type -> IO Constraint
 constrainLambda rtv pos args body expected =
     IO.do (constrainArguments args) <| \argsAcc ->
     IO.do (constrain rtv body (Constraint.Expected_NoExpectation argsAcc.result)) <| \bodyCon ->
