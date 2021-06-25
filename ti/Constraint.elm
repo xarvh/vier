@@ -1,15 +1,15 @@
 module Constraint exposing (..)
 
-import Dict exposing (Dict)
 import CanonicalAst as CA exposing (At, Name, Pos)
+import Dict exposing (Dict)
 import Type exposing (Type)
-
 
 
 
 --
 -- Expressions: Category/Expected/Context
 --
+
 
 {-| TODO rename this to ExpressionCategory?
 -}
@@ -43,9 +43,11 @@ type
     = Context_ListEntry Int
 
 
+
 --
 -- Patterns: Category/Expected/Context
 --
+
 
 type PatternExpected ty
     = PatternExpected_NoExpectation ty
@@ -65,8 +67,6 @@ type PatternContext
 --          = TypedIfBranch Index.ZeroBased
 --          | TypedCaseBranch Index.ZeroBased
 -- | TypedBody
-
-
 
 
 type Constraint

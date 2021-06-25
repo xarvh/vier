@@ -79,7 +79,7 @@ type ExpressionRaw
     | If (List ( Expression, Expression )) Expression
     | Try Expression (List ( Pattern, Expression ))
     | Let Def Expression
-    -- TODO record update
+      -- TODO record update
     | Record (Dict String Expression)
 
 
@@ -89,7 +89,6 @@ type alias Def =
     , args : List Pattern
     , body : Expression
     }
-
 
 
 type alias VariableArgs =

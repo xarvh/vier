@@ -9,23 +9,10 @@ import Type exposing (Type)
 
 
 
--- fold types
-
-
-type alias ArgsAcc =
-    { vars : List Type.Variable
-    , ty : Type
-    , result : Type
-    , patternAcc : Pattern.Acc
-    }
-
-
-
---
-
 
 type alias RigidTypeVars =
     Dict Name Type
+
 
 
 constrain : RigidTypeVars -> CA.Expression -> Expected Type -> IO Constraint
@@ -120,6 +107,13 @@ constrainLambda rtv pos args body expected =
         |> Constraint.exists argsAcc.vars
         |> IO.return
 
+
+type alias ArgsAcc =
+    { vars : List Type.Variable
+    , ty : Type
+    , result : Type
+    , patternAcc : Pattern.Acc
+    }
 
 constrainArguments : List CA.Pattern -> IO ArgsAcc
 constrainArguments args =
