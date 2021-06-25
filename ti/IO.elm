@@ -8,7 +8,8 @@ type IO a
 
 
 type alias State =
-    Int
+    { nextId : Int
+    }
 
 
 
@@ -17,7 +18,7 @@ type alias State =
 
 newId : IO Int
 newId =
-    Wrapper (\state -> ( state, state + 1 ))
+    Wrapper (\state -> ( state.nextId, { state | nextId = state.nextId + 1 } ))
 
 
 

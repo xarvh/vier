@@ -1,5 +1,7 @@
 module GetConstraints exposing (..)
 
+-- TODO Rename to Constraints.Expressions?
+
 import CanonicalAst as CA exposing (Name, Pos)
 import Constraint exposing (Constraint, Expected)
 import Dict exposing (Dict)
@@ -8,11 +10,8 @@ import Pattern
 import Type exposing (Type)
 
 
-
-
 type alias RigidTypeVars =
     Dict Name Type
-
 
 
 constrain : RigidTypeVars -> CA.Expression -> Expected Type -> IO Constraint
@@ -114,6 +113,7 @@ type alias ArgsAcc =
     , result : Type
     , patternAcc : Pattern.Acc
     }
+
 
 constrainArguments : List CA.Pattern -> IO ArgsAcc
 constrainArguments args =
