@@ -1,5 +1,7 @@
 module IO exposing (..)
 
+import Dict exposing (Dict)
+
 
 type IO a
     = Wrapper (State -> ( a, State ))
@@ -7,6 +9,19 @@ type IO a
 
 type alias State =
     Int
+
+
+
+--
+
+
+newId : IO Int
+newId =
+    Wrapper (\state -> ( state, state + 1 ))
+
+
+
+--
 
 
 do : IO a -> (a -> IO b) -> IO b
@@ -29,9 +44,13 @@ return a =
     Wrapper (\state -> ( a, state ))
 
 
-newId : IO Int
-newId =
-    Wrapper (\state -> ( state, state + 1 ))
+run : State -> IO output -> ( output, State )
+run s (Wrapper a) =
+    a s
+
+
+
+-- List
 
 
 list_foldl : (item -> acc -> IO acc) -> List item -> acc -> IO acc
@@ -47,29 +66,41 @@ list_foldl f ls acc =
 list_map : (a -> IO b) -> List a -> IO (List b)
 list_map f ls =
     let
-        fio item acc =
-            do (f item) <| \b ->
+        f_io a acc =
+            do (f a) <| \b ->
             return (b :: acc)
     in
-    do (list_foldl fio ls []) <| (List.reverse >> return)
+    do (list_foldl f_io ls []) <| (List.reverse >> return)
 
 
-indexedMap_list : (Int -> a -> IO b) -> List a -> IO (List b)
-indexedMap_list f ls =
-    do (indexedMap_listRec f 0 [] ls) <| (List.reverse >> return)
+list_indexMap : (Int -> a -> IO b) -> List a -> IO (List b)
+list_indexMap f ls =
+    let
+        f_io item ( index, acc ) =
+            do (f index item) <| \b ->
+            return ( index + 1, b :: acc )
+    in
+    do (list_foldl f_io ls ( 0, [] )) <| (Tuple.second >> List.reverse >> return)
 
 
-indexedMap_listRec : (Int -> a -> IO b) -> Int -> List b -> List a -> IO (List b)
-indexedMap_listRec f n accum ls =
-    case ls of
-        [] ->
-            return accum
 
-        head :: tail ->
-            do (f n head) <| \b ->
-            indexedMap_listRec f (n + 1) (b :: accum) tail
+-- Dict
 
 
-run : State -> IO output -> ( output, State )
-run s (Wrapper a) =
-    a s
+dict_foldl : (comparable -> item -> acc -> IO acc) -> Dict comparable item -> acc -> IO acc
+dict_foldl f dict =
+    let
+        f_io ( key, item ) =
+            f key item
+    in
+    list_foldl f_io (Dict.toList dict)
+
+
+dict_map : (comparable -> a -> IO b) -> Dict comparable a -> IO (Dict comparable b)
+dict_map f dict =
+    let
+        f_io k a acc =
+            do (f k a) <| \b ->
+            return (Dict.insert k b acc)
+    in
+    dict_foldl f_io dict Dict.empty

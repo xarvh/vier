@@ -89,7 +89,7 @@ constrainList rtv pos items expected =
         listType =
             Type.AppN "SPCore/List" "List" [ itemType ]
     in
-    IO.do (IO.indexedMap_list (constrainListEntry rtv pos itemType) items) <| \itemCons ->
+    IO.do (IO.list_indexMap (constrainListEntry rtv pos itemType) items) <| \itemCons ->
     [ Constraint.And itemCons
     , Constraint.Equal pos Constraint.Category_List listType expected
     ]
@@ -159,7 +159,35 @@ constrainArgumentsRec args acc =
 
 constrainRecord : RigidTypeVars -> Pos -> Dict Name CA.Expression -> Expected Type -> IO Constraint
 constrainRecord rtv pos fields expected =
-    Debug.todo ""
+    IO.do (IO.dict_map (\name -> constrainRecordAttribute rtv) fields) <| \dict ->
+    let
+        recordType =
+            Type.RecordN (Dict.map .ty dict) Type.EmptyRecordN
+
+        recordCon =
+            Constraint.Equal pos Constraint.Category_Record recordType expected
+
+        vars =
+            Dict.foldr (\r vs -> r.var :: vs) [] dict
+
+        cons =
+            Dict.foldr (\r cs -> r.constraint :: cs) [ recordCon ] dict
+    in
+    cons
+        |> Constraint.And
+        |> exists vars
+        |> IO.return
+
+
+constrainRecordAttribute : RigidTypeVars -> CA.Expression -> IO { var : Variable, ty : Type, constraint : Constraint }
+constrainRecordAttribute rtv expression =
+    IO.do Type.mkFlexVar <| \var ->
+    let
+        ty =
+            Type.VarN var
+    in
+    IO.do (constrain rtv expr (NoExpectation ty)) <| \con ->
+    IO.return { var = var, ty = ty, constraint = con }
 
 
 constrainDef rtv def =

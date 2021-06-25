@@ -1,6 +1,7 @@
 module Type exposing (..)
 
 import CanonicalAst as CA exposing (Name, Pos)
+import Dict exposing (Dict)
 import IO exposing (IO)
 
 
@@ -17,8 +18,6 @@ type alias Variable =
 
          = PlaceHolder Name.Name
          | AliasN ModuleName.Canonical Name.Name [(Name.Name, Type)] Type
-         | EmptyRecordN
-         | RecordN (Map.Map Name.Name Type) Type
          | UnitN
          | TupleN Type Type (Maybe Type)
 
@@ -27,6 +26,8 @@ type Type
     = VarN CA.TyVarRef
     | AppN CA.ModuleName Name (List Type)
     | FunN Type Type
+    | EmptyRecordN
+    | RecordN (Dict Name Type) Type
 
 
 
@@ -36,6 +37,7 @@ type Type
 mkFlexVar : IO Variable
 mkFlexVar =
     IO.newId
+
 
 nameToFlex : Name -> IO Variable
 nameToFlex name =
