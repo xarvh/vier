@@ -3,26 +3,8 @@ module IO exposing (..)
 import Dict exposing (Dict)
 
 
-type IO a
-    = Wrapper (State -> ( a, State ))
-
-
-type alias State =
-    { nextId : Int
-    }
-
-
-
---
-
-
-newId : IO Int
-newId =
-    Wrapper (\state -> ( state.nextId, { state | nextId = state.nextId + 1 } ))
-
-
-
---
+type IO state a
+    = Wrapper (state -> ( a, state ))
 
 
 do : IO a -> (a -> IO b) -> IO b
@@ -45,7 +27,7 @@ return a =
     Wrapper (\state -> ( a, state ))
 
 
-run : State -> IO output -> ( output, State )
+run : state -> IO output -> ( output, state )
 run s (Wrapper a) =
     a s
 
@@ -54,7 +36,7 @@ run s (Wrapper a) =
 -- List
 
 
-list_foldl : (item -> acc -> IO acc) -> List item -> acc -> IO acc
+list_foldl : (item -> acc -> IO s acc) -> List item -> acc -> IO s acc
 list_foldl f ls acc =
     case ls of
         [] ->
@@ -64,7 +46,7 @@ list_foldl f ls acc =
             do (f head acc) <| list_foldl f tail
 
 
-list_map : (a -> IO b) -> List a -> IO (List b)
+list_map : (a -> IO s b) -> List a -> IO s (List b)
 list_map f ls =
     let
         f_io a acc =
@@ -74,7 +56,7 @@ list_map f ls =
     do (list_foldl f_io ls []) <| (List.reverse >> return)
 
 
-list_indexMap : (Int -> a -> IO b) -> List a -> IO (List b)
+list_indexMap : (Int -> a -> IO s b) -> List a -> IO s (List b)
 list_indexMap f ls =
     let
         f_io item ( index, acc ) =
@@ -88,7 +70,7 @@ list_indexMap f ls =
 -- Dict
 
 
-dict_foldl : (comparable -> item -> acc -> IO acc) -> Dict comparable item -> acc -> IO acc
+dict_foldl : (comparable -> item -> acc -> IO s acc) -> Dict comparable item -> acc -> IO s acc
 dict_foldl f dict =
     let
         f_io ( key, item ) =
@@ -97,7 +79,7 @@ dict_foldl f dict =
     list_foldl f_io (Dict.toList dict)
 
 
-dict_map : (comparable -> a -> IO b) -> Dict comparable a -> IO (Dict comparable b)
+dict_map : (comparable -> a -> IO s b) -> Dict comparable a -> IO s (Dict comparable b)
 dict_map f dict =
     let
         f_io k a acc =
