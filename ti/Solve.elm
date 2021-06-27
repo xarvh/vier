@@ -4,8 +4,8 @@ import Array exposing (Array)
 import CanonicalAst as CA exposing (Name, Pos)
 import Constraint exposing (Constraint, Expected)
 import Dict exposing (Dict)
-import IO exposing (IO)
-import Type exposing (Type)
+import IO
+import Type exposing (IO, Type)
 
 
 
@@ -24,11 +24,9 @@ type alias Env =
     Dict Name Type.Variable
 
 
-
-
 type alias Acc =
     { env : Env
-    , mark : Mark
+    , mark : Type.Mark
     , errors : List Error
     }
 
@@ -36,7 +34,7 @@ type alias Acc =
 initAcc : Acc
 initAcc =
     { env = Dict.empty
-    , mark = nextMark noMark
+    , mark = Type.nextMark Type.noMark
     , errors = []
     }
 
@@ -44,7 +42,7 @@ initAcc =
 run : Constraint -> IO (Result (List Error) (Dict Name CA.Annotation))
 run constraint =
     IO.do (Type.poolsNew Type.poolsInit) <| \pools ->
-    IO.do (solve Map.empty outermostRank pools constraint initAcc) <| \acc ->
+    IO.do (solve Dict.empty Type.outermostRank pools constraint initAcc) <| \acc ->
     if acc.errors == [] then
         Debug.todo "Right <$> traverse Type.toAnnotation acc.env"
 
@@ -58,7 +56,7 @@ run constraint =
 -- Solver
 
 
-solve : Env -> Int -> Pools -> Constraint -> Acc -> IO Acc
+solve : Env -> Int -> Type.Pools -> Constraint -> Acc -> IO Acc
 solve env rank pools constraint acc =
     case constraint of
         Constraint.True_ ->
@@ -137,77 +135,78 @@ solve env rank pools constraint acc =
         Constraint.And constraints ->
             foldM (solve env rank pools) state constraints
 
-        Constraint.Let [] flexs _ headerCon Constraint.True_ ->
-            IO.do (introduce rank pools flexs) <| \_ ->
-            solve env rank pools state headerCon
+        Constraint.Let params ->
+            if params.rigidVars == [] && param.bodyCon == Constraint.True_ then
+                IO.do (introduce rank pools params.flexVars) <| \_ ->
+                solve env rank pools state params.headerCon
 
-        Constraint.Let [] [] header headerCon subCon ->
-            IO.do (solve env rank pools state headerCon) <| \state1 ->
-            IO.do (traverse (A.traverse (typeToVariable rank pools)) header) <| \locals ->
-            let
-                newEnv =
-                    Map.union env (Map.map A.toValue locals)
-            in
-            IO.do (solve newEnv rank pools state1 subCon) <| \state2 ->
-            foldM occurs state2 <| Map.toList locals
+            else if params.rigidVars == [] && params.flexVars == [] then
+                IO.do (solve env rank pools state params.headerCon) <| \state1 ->
+                IO.do (traverse (A.traverse (typeToVariable rank pools)) params.header) <| \locals ->
+                let
+                    newEnv =
+                        Dict.union env (Dict.map A.toValue locals)
+                in
+                IO.do (solve newEnv rank pools state1 params.bodyCon) <| \state2 ->
+                foldM occurs state2 <| Map.toList locals
 
-        Constraint.Let rigids flexs header headerCon subCon ->
-            -- work in the next pool to localize header
-            let
-                nextRank =
-                    rank + 1
+            else
+                -- work in the next pool to localize header
+                let
+                    nextRank =
+                        rank + 1
 
-                poolsLength =
-                  Type.poolsLength pools
+                    poolsLength =
+                        Type.poolsLength pools
 
-                maybeGrowPools =
-                    if nextRank < poolsLength then
-                        return pools
+                    maybeGrowPools =
+                        if nextRank < poolsLength then
+                            IO.return pools
 
-                    else
-                        Type.poolsGrow pools poolsLength
-            in
-            IO.do maybeGrowPools <| \nextPools ->
-            -- introduce variables
-            let
-                vars =
-                    rigids ++ flexs
+                        else
+                            Type.poolsGrow pools poolsLength
+                in
+                IO.do maybeGrowPools <| \nextPools ->
+                -- introduce variables
+                let
+                    vars =
+                        params.rigidVars ++ params.flexVars
 
-                doStuff =
-                    forM_ vars <| \var ->
-                    UF.modify var <| \(Descriptor content _ mark copy) ->
-                    Descriptor content nextRank mark copy
-            in
-            IO.do doStuff <| \_ ->
-            IO.do (MVector.write nextPools nextRank vars) <| \_ ->
-            -- run solver in next pool
-            IO.do (traverse (A.traverse (typeToVariable nextRank nextPools)) header) <| \locals ->
-            IO.do (solve env nextRank nextPools state headerCon) <| \acc ->
-            -- (Acc savedEnv mark errors) = acc
-            let
-                youngMark =
-                    mark
+                    doStuff =
+                        forM_ vars <| \var ->
+                        UF.modify var <| \descriptor -> { descriptor | rank = nextRank }
 
-                visitMark =
-                    nextMark youngMark
+                in
+                IO.do doStuff <| \_ ->
+                IO.do (MVector.write nextPools nextRank vars) <| \_ ->
+                -- run solver in next pool
+                IO.do (traverse (A.traverse (typeToVariable nextRank nextPools)) params.header) <| \locals ->
+                IO.do (solve env nextRank nextPools state params.headerCon) <| \acc ->
+                -- (Acc savedEnv mark errors) = acc
+                let
+                    youngMark =
+                        mark
 
-                finalMark =
-                    nextMark visitMark
-            in
-            -- pop pool
-            IO.do (generalize youngMark visitMark nextRank nextPools) <| \_ ->
-            IO.do (MVector.write nextPools nextRank []) <| \_ ->
-            -- check that things went well
-            IO.do (mapM_ isGeneric rigids) <| \_ ->
-            let
-                newEnv =
-                    Map.union env (Map.map A.toValue locals)
+                    visitMark =
+                        nextMark youngMark
 
-                tempState =
-                    Acc savedEnv finalMark errors
-            in
-            IO.do (solve newEnv rank nextPools tempState subCon) <| \newState ->
-            foldM occurs newState (Map.toList locals)
+                    finalMark =
+                        nextMark visitMark
+                in
+                -- pop pool
+                IO.do (generalize youngMark visitMark nextRank nextPools) <| \_ ->
+                IO.do (MVector.write nextPools nextRank []) <| \_ ->
+                -- check that things went well
+                IO.do (mapM_ isGeneric params.rigidVars) <| \_ ->
+                let
+                    newEnv =
+                        Map.union env (Map.map A.toValue locals)
+
+                    tempState =
+                        Acc savedEnv finalMark errors
+                in
+                IO.do (solve newEnv rank nextPools tempState params.bodyCon) <| \newState ->
+                foldM occurs newState (Map.toList locals)
 
 
 typeToVariable : Int -> Pools -> Type -> IO Type.Variable
@@ -291,7 +290,7 @@ patternExpectationToVariable rank pools expectation =
 
 introduce : Int -> Pools -> List Type.Variable -> IO ()
 introduce rank pools variables =
-    IO.do (modifyPools  rank ((++) variables) pools) <| \_ ->
+    IO.do (modifyPools rank ((++) variables) pools) <| \_ ->
     forM_ variables <| \var ->
     UF.modify var <| \descriptor ->
     { descriptor | rank = rank }

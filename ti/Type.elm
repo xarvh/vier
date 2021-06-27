@@ -104,13 +104,99 @@ poolsInit =
     Array.repeat 8 []
 
 
-poolsNew : AllocatedPools -> IO Pools
-poolsNew initValue =
-    -- "MVector.replicate 8 []"
+
+--
+-- IO Monad
+--
+
+
+type alias IO a =
+    IO.IO State a
+
+
+type alias State =
+    { allocatedDescriptors : Dict Int Descriptor
+    , allocatedPools : Dict Int AllocatedPools
+    }
+
+
+
+-- Flex vars
+
+
+mkFlexVar : IO Variable
+mkFlexVar =
+    unnamedFlexVar
+        |> initDescriptor
+        |> allocateDescriptor
+
+
+nameToFlex : Name -> IO Variable
+nameToFlex name =
+    name
+        |> Just
+        |> FlexVar
+        |> initDescriptor
+        |> allocateDescriptor
+
+
+unnamedFlexVar : Content
+unnamedFlexVar =
+    FlexVar Nothing
+
+
+
+-- Ranks
+
+
+noRank : Int
+noRank =
+    0
+
+
+outermostRank : Int
+outermostRank =
+    1
+
+
+
+-- Marks
+
+
+type Mark
+    = Mark Int
+
+
+noMark : Mark
+noMark =
+    Mark 2
+
+
+occursMark : Mark
+occursMark =
+    Mark 1
+
+
+getVarNamesMark : Mark
+getVarNamesMark =
+    Mark 0
+
+
+nextMark : Mark -> Mark
+nextMark (Mark mark) =
+    Mark (mark + 1)
+
+
+
+-- Descriptors
+
+
+allocateDescriptor : Descriptor -> IO Variable
+allocateDescriptor descriptor =
     let
         nextId : State -> Int
         nextId state =
-            state.allocatedPools
+            state.allocatedDescriptors
                 |> Dict.keys
                 |> List.maximum
                 |> Maybe.withDefault 0
@@ -123,10 +209,39 @@ poolsNew initValue =
                     nextId state
             in
             ( Variable id
+            , { state | allocatedDescriptors = Dict.insert id descriptor state.allocatedDescriptors }
+            )
+    in
+    IO.Wrapper allocate
+
+
+
+-- Pools
+
+
+poolsNew : AllocatedPools -> IO Pools
+poolsNew initValue =
+    -- "MVector.replicate 8 []"
+    let
+        nextId : State -> Int
+        nextId state =
+            state.allocatedPools
+                |> Dict.keys
+                |> List.maximum
+                |> Maybe.withDefault 0
+                |> (+) 1
+
+        allocate : State -> ( Pools, State )
+        allocate state =
+            let
+                id =
+                    nextId state
+            in
+            ( Pools id
             , { state | allocatedPools = Dict.insert id initValue state.allocatedPools }
             )
     in
-    Wrapper allocate
+    IO.Wrapper allocate
 
 
 poolsModify : Pools -> (List Variable -> List Variable) -> Int -> IO ()
@@ -167,7 +282,7 @@ poolsLength (Pools id) =
                     Debug.todo "poolsLength"
 
                 Just pools ->
-                    ( Array.size pools, state )
+                    ( Array.length pools, state )
     in
     IO.Wrapper length
 
@@ -219,100 +334,3 @@ poolsGrow (Pools id) numberOfAdditionalElements =
     Array.repeat numberOfAdditionalElements []
         |> Array.append allocatedPools
         |> poolsNew
-
-
-
---
--- IO Monad
---
-
-
-type alias IO a =
-    IO.IO State a
-
-
-type alias State =
-    { allocatedDescriptors : Dict Int Descriptor
-    , allocatedPools : Dict Int Pools
-    }
-
-
-allocateDescriptor : Descriptor -> IO Variable
-allocateDescriptor descriptor =
-    let
-        nextId : State -> Int
-        nextId state =
-            state.allocatedDescriptors
-                |> Dict.keys
-                |> List.maximum
-                |> Maybe.withDefault 0
-                |> (+) 1
-
-        allocate : State -> ( Variable, State )
-        allocate state =
-            let
-                id =
-                    nextId state
-            in
-            ( Variable id
-            , { state | allocatedDescriptors = Dict.insert id descriptor state.allocatedDescriptors }
-            )
-    in
-    Wrapper allocate
-
-
-
--- Flex vars
-
-
-mkFlexVar : IO Variable
-mkFlexVar =
-    unnamedFlexVar
-        |> initDescriptor
-        |> allocateVariable
-
-
-nameToFlex : Name -> IO Variable
-nameToFlex name =
-    name
-        |> Just
-        |> FlexVar
-        |> initDescriptor
-        |> allocateVariable
-
-
-unnamedFlexVar : Content
-unnamedFlexVar =
-    FlexVar Nothing
-
-
-
--- Ranks
-
-
-noRank : Int
-noRank =
-    0
-
-
-
--- Marks
-
-
-type Mark
-    = Mark Int
-
-
-noMark : Mark
-noMark =
-    Mark 2
-
-
-occursMark : Mark
-occursMark =
-    Mark 1
-
-
-getVarNamesMark : Mark
-getVarNamesMark =
-    Mark 0

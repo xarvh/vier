@@ -7,7 +7,7 @@ type IO state a
     = Wrapper (state -> ( a, state ))
 
 
-do : IO a -> (a -> IO b) -> IO b
+do : IO s a -> (a -> IO s b) -> IO s b
 do (Wrapper genA) f =
     Wrapper
         (\state ->
@@ -22,12 +22,12 @@ do (Wrapper genA) f =
         )
 
 
-return : a -> IO a
+return : a -> IO s a
 return a =
     Wrapper (\state -> ( a, state ))
 
 
-run : state -> IO output -> ( output, state )
+run : s -> IO s output -> ( output, s )
 run s (Wrapper a) =
     a s
 
