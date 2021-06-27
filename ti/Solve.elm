@@ -56,6 +56,16 @@ run constraint =
 -- Solver
 
 
+atToValue : CA.At a -> a
+atToValue (CA.At _ a) =
+    a
+
+
+at_traverse : (a -> IO b) -> CA.At a -> IO (CA.At b)
+at_traverse func (CA.At pos a) =
+    IO.do (func a) <| (CA.At pos >> IO.return)
+
+
 solve : Env -> Int -> Type.Pools -> Constraint -> Acc -> IO Acc
 solve env rank pools constraint acc =
     case constraint of
@@ -89,12 +99,12 @@ solve env rank pools constraint acc =
             case answer of
                 Unify.Ok vars ->
                     IO.do (introduce rank pools vars) <| \_ ->
-                    IO.return state
+                    IO.return acc
 
                 Unify.Err vars actualType expectedType ->
                     IO.do (introduce rank pools vars) <| \_ ->
                     IO.return <|
-                        addError state <|
+                        addError acc <|
                             Error.BadExpr region (Error.Local name) actualType <|
                                 Error.typeReplace expectation expectedType
 
@@ -105,12 +115,12 @@ solve env rank pools constraint acc =
             case answer of
                 Unify.Ok vars ->
                     IO.do (introduce rank pools vars) <| \_ ->
-                    IO.return state
+                    IO.return acc
 
                 Unify.Err vars actualType expectedType ->
                     IO.do (introduce rank pools vars) <| \_ ->
                     IO.return <|
-                        addError state <|
+                        addError acc <|
                             Error.BadExpr region (Error.Foreign name) actualType <|
                                 Error.typeReplace expectation expectedType
 
@@ -121,34 +131,34 @@ solve env rank pools constraint acc =
             case answer of
                 Unify.Ok vars ->
                     IO.do (introduce rank pools vars) <| \_ ->
-                    IO.return state
+                    IO.return acc
 
                 Unify.Err vars actualType expectedType ->
                     IO.do (introduce rank pools vars) <| \_ ->
                     IO.return <|
-                        addError state <|
+                        addError acc <|
                             Error.BadPattern region
                                 category
                                 actualType
                                 (Error.ptypeReplace expectation expectedType)
 
         Constraint.And constraints ->
-            foldM (solve env rank pools) state constraints
+            foldM (solve env rank pools) acc constraints
 
         Constraint.Let params ->
-            if params.rigidVars == [] && param.bodyCon == Constraint.True_ then
+            if params.rigidVars == [] && params.bodyCon == Constraint.True_ then
                 IO.do (introduce rank pools params.flexVars) <| \_ ->
-                solve env rank pools state params.headerCon
+                solve env rank pools acc params.headerCon
 
             else if params.rigidVars == [] && params.flexVars == [] then
-                IO.do (solve env rank pools state params.headerCon) <| \state1 ->
-                IO.do (traverse (A.traverse (typeToVariable rank pools)) params.header) <| \locals ->
+                IO.do (solve env rank pools acc params.headerCon) <| \state1 ->
+                IO.do (traverse (at_traverse (typeToVariable rank pools)) params.header) <| \locals ->
                 let
                     newEnv =
-                        Dict.union env (Dict.map A.toValue locals)
+                        Dict.union env (Dict.map atToValue locals)
                 in
                 IO.do (solve newEnv rank pools state1 params.bodyCon) <| \state2 ->
-                foldM occurs state2 <| Map.toList locals
+                foldM occurs state2 <| Dict.toList locals
 
             else
                 -- work in the next pool to localize header
@@ -174,14 +184,13 @@ solve env rank pools constraint acc =
 
                     doStuff =
                         forM_ vars <| \var ->
-                        UF.modify var <| \descriptor -> { descriptor | rank = nextRank }
-
+                        Type.flexModify var <| \descriptor -> { descriptor | rank = nextRank }
                 in
                 IO.do doStuff <| \_ ->
-                IO.do (MVector.write nextPools nextRank vars) <| \_ ->
+                IO.do (Type.poolsWrite nextPools nextRank vars) <| \_ ->
                 -- run solver in next pool
                 IO.do (traverse (A.traverse (typeToVariable nextRank nextPools)) params.header) <| \locals ->
-                IO.do (solve env nextRank nextPools state params.headerCon) <| \acc ->
+                IO.do (solve env nextRank nextPools acc params.headerCon) <| \acc ->
                 -- (Acc savedEnv mark errors) = acc
                 let
                     youngMark =
@@ -195,12 +204,12 @@ solve env rank pools constraint acc =
                 in
                 -- pop pool
                 IO.do (generalize youngMark visitMark nextRank nextPools) <| \_ ->
-                IO.do (MVector.write nextPools nextRank []) <| \_ ->
+                IO.do (Type.poolsWrite nextPools nextRank []) <| \_ ->
                 -- check that things went well
                 IO.do (mapM_ isGeneric params.rigidVars) <| \_ ->
                 let
                     newEnv =
-                        Map.union env (Map.map A.toValue locals)
+                        Map.union env (Map.map atToValue locals)
 
                     tempState =
                         Acc savedEnv finalMark errors
@@ -209,12 +218,12 @@ solve env rank pools constraint acc =
                 foldM occurs newState (Map.toList locals)
 
 
-typeToVariable : Int -> Pools -> Type -> IO Type.Variable
+typeToVariable : Int -> Type.Pools -> Type -> IO Type.Variable
 typeToVariable rank pools ty =
     typeToVar rank pools Dict.empty ty
 
 
-typeToVar : Int -> Pools -> Dict Name Type.Variable -> Type -> IO Type.Variable
+typeToVar : Int -> Type.Pools -> Dict Name Type.Variable -> Type -> IO Type.Variable
 typeToVar rank pools aliasDict tipe =
     let
         go =
@@ -259,7 +268,7 @@ typeToVar rank pools aliasDict tipe =
             register rank pools (Structure (Tuple1 aVar bVar cVar))
 
 
-expectedToVariable : Int -> Pools -> Expected Type -> IO Type.Variable
+expectedToVariable : Int -> Type.Pools -> Expected Type -> IO Type.Variable
 expectedToVariable rank pools expectation =
     typeToVariable rank
         pools
@@ -275,7 +284,7 @@ expectedToVariable rank pools expectation =
         )
 
 
-patternExpectationToVariable : Int -> Pools -> Constraint.PatternExpected Type -> IO Type.Variable
+patternExpectationToVariable : Int -> Type.Pools -> Constraint.PatternExpected Type -> IO Type.Variable
 patternExpectationToVariable rank pools expectation =
     typeToVariable rank
         pools
@@ -288,9 +297,9 @@ patternExpectationToVariable rank pools expectation =
         )
 
 
-introduce : Int -> Pools -> List Type.Variable -> IO ()
+introduce : Int -> Type.Pools -> List Type.Variable -> IO ()
 introduce rank pools variables =
-    IO.do (modifyPools rank ((++) variables) pools) <| \_ ->
+    IO.do (Type.modifyPools rank ((++) variables) pools) <| \_ ->
     forM_ variables <| \var ->
-    UF.modify var <| \descriptor ->
+    Type.flexModify var <| \descriptor ->
     { descriptor | rank = rank }

@@ -17,8 +17,7 @@ type alias Name =
 {-| This is a reference to an allocated Descriptor
 -}
 type Variable
-    = -- TODO: UF.Point Descriptor
-      Variable Int
+    = Variable Int
 
 
 {-| This is a reference to an AllocatedPools
@@ -143,6 +142,27 @@ nameToFlex name =
 unnamedFlexVar : Content
 unnamedFlexVar =
     FlexVar Nothing
+
+
+flexModify : Variable -> (Descriptor -> Descriptor) -> IO ()
+flexModify (Variable id) f =
+    let
+        upd : Maybe Descriptor -> Maybe Descriptor
+        upd maybeDescriptor =
+          case maybeDescriptor of
+            Nothing ->
+              Debug.todo <| "flexModify: no id " ++ String.fromInt id
+            Just descriptor ->
+              Just <| f descriptor
+
+
+        modify : State -> ( (), State )
+        modify state =
+            ( ()
+            , { state | allocatedDescriptors = Dict.update id upd state.allocatedDescriptors }
+            )
+    in
+    IO.Wrapper modify
 
 
 
