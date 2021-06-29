@@ -149,12 +149,12 @@ flexModify (Variable id) f =
     let
         upd : Maybe Descriptor -> Maybe Descriptor
         upd maybeDescriptor =
-          case maybeDescriptor of
-            Nothing ->
-              Debug.todo <| "flexModify: no id " ++ String.fromInt id
-            Just descriptor ->
-              Just <| f descriptor
+            case maybeDescriptor of
+                Nothing ->
+                    Debug.todo <| "flexModify: no id " ++ String.fromInt id
 
+                Just descriptor ->
+                    Just <| f descriptor
 
         modify : State -> ( (), State )
         modify state =
@@ -330,8 +330,34 @@ poolsWrite (Pools id) index vars =
     IO.Wrapper write
 
 
+poolsRead : Pools -> Int -> IO (List Variable)
+poolsRead pools index =
+    IO.do (poolsReadAll pools) <| \allocatedPools ->
+    case Array.get index allocatedPools of
+        Nothing ->
+            Debug.todo <| "poolsRead index " ++ String.fromInt index
+
+        Just pool ->
+            IO.return pool
+
+
+poolsReadAll : Pools -> IO AllocatedPools
+poolsReadAll (Pools id) =
+    let
+        read : State -> ( AllocatedPools, State )
+        read state =
+            case Dict.get id state.allocatedPools of
+                Nothing ->
+                    Debug.todo <| "poolsRead: segmentation fault! XD accessing pool " ++ String.fromInt id
+
+                Just allocatedPools ->
+                    ( allocatedPools, state )
+    in
+    IO.Wrapper read
+
+
 poolsGrow : Pools -> Int -> IO Pools
-poolsGrow (Pools id) numberOfAdditionalElements =
+poolsGrow pools numberOfAdditionalElements =
     -- MVector.grow pools poolsLength
     {- https://hackage.haskell.org/package/vector-0.12.3.0/docs/Data-Vector-Mutable.html#g:8
 
@@ -340,17 +366,7 @@ poolsGrow (Pools id) numberOfAdditionalElements =
 
        Our values are Lists of IORefs.
     -}
-    let
-        read : State -> ( AllocatedPools, State )
-        read state =
-            case Dict.get id state.allocatedPools of
-                Nothing ->
-                    Debug.todo <| "grow: segmentation fault! XD accessing pool " ++ String.fromInt id
-
-                Just allocatedPools ->
-                    ( allocatedPools, state )
-    in
-    IO.do (IO.Wrapper read) <| \allocatedPools ->
+    IO.do (poolsReadAll pools) <| \allocatedPools ->
     Array.repeat numberOfAdditionalElements []
         |> Array.append allocatedPools
         |> poolsNew

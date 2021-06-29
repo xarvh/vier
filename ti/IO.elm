@@ -66,6 +66,17 @@ list_indexMap f ls =
     do (list_foldl f_io ls ( 0, [] )) <| (Tuple.second >> List.reverse >> return)
 
 
+list_for : List a -> (a -> IO s ()) -> IO s ()
+list_for ls f =
+    case ls of
+        [] ->
+            return ()
+
+        head :: tail ->
+            do (f head) <| \() ->
+            list_for tail f
+
+
 
 -- Dict
 
