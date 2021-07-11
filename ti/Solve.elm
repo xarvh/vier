@@ -1,9 +1,11 @@
 module Solve exposing (..)
 
+import Unify
 import Array exposing (Array)
 import CanonicalAst as CA exposing (Name, Pos)
 import Constraint exposing (Constraint, Expected)
 import Dict exposing (Dict)
+import Error
 import IO
 import Type exposing (IO, Type)
 
@@ -87,7 +89,7 @@ solve env rank pools constraint acc =
 
                 Err ( vars, actualType, expectedType ) ->
                     IO.do (introduce rank pools vars) <| \_ ->
-                    Error.typeReplace expectation expectedType
+                    Constraint.typeReplace expectation expectedType
                         |> Error.BadExpr region category actualType
                         |> addError acc
                         |> IO.return
@@ -106,7 +108,7 @@ solve env rank pools constraint acc =
                     IO.return <|
                         addError acc <|
                             Error.BadExpr region (Error.Local name) actualType <|
-                                Error.typeReplace expectation expectedType
+                                Constraint.typeReplace expectation expectedType
 
         Constraint.Foreign region name (CA.Forall freeVars srcType) expectation ->
             IO.do (srcTypeToVariable rank pools freeVars srcType) <| \actual ->
@@ -119,10 +121,10 @@ solve env rank pools constraint acc =
 
                 Err ( vars, actualType, expectedType ) ->
                     IO.do (introduce rank pools vars) <| \_ ->
-                    IO.return <|
-                        addError acc <|
-                            Error.BadExpr region (Error.Foreign name) actualType <|
-                                Error.typeReplace expectation expectedType
+                    Constraint.typeReplace expectation expectedType
+                        |> Error.BadExpr region (Error.Foreign name) actualType
+                        |> IO.return
+                        |> addError acc
 
         Constraint.Pattern region category ty expectation ->
             IO.do (typeToVariable rank pools ty) <| \actual ->
@@ -135,12 +137,10 @@ solve env rank pools constraint acc =
 
                 Err ( vars, actualType, expectedType ) ->
                     IO.do (introduce rank pools vars) <| \_ ->
-                    IO.return <|
-                        addError acc <|
-                            Error.BadPattern region
-                                category
-                                actualType
-                                (Error.ptypeReplace expectation expectedType)
+                    Constraint.ptypeReplace expectation expectedType
+                        |> Error.BadPattern region category actualType
+                        |> addError acc
+                        |> IO.return
 
         Constraint.And constraints ->
             IO.list_foldl (solve env rank pools) acc constraints
@@ -152,7 +152,7 @@ solve env rank pools constraint acc =
 
             else if params.rigidVars == [] && params.flexVars == [] then
                 IO.do (solve env rank pools acc params.headerCon) <| \state1 ->
-                IO.do (traverse (at_traverse (typeToVariable rank pools)) params.header) <| \locals ->
+                IO.do (IO.dict_foldl (at_traverse (typeToVariable rank pools)) params.header) <| \locals ->
                 let
                     newEnv =
                         Dict.union env (Dict.map atToValue locals)
@@ -189,7 +189,7 @@ solve env rank pools constraint acc =
                 IO.do doStuff <| \_ ->
                 IO.do (Type.poolsWrite nextPools nextRank vars) <| \_ ->
                 -- run solver in next pool
-                IO.do (traverse (at_traverse (typeToVariable nextRank nextPools)) params.header) <| \locals ->
+                IO.do (IO.dict_foldl (at_traverse (typeToVariable nextRank nextPools)) params.header) <| \locals ->
                 IO.do (solve env nextRank nextPools acc params.headerCon) <| \accX ->
                 -- (Acc savedEnv mark errors) = acc
                 let
@@ -235,7 +235,7 @@ typeToVar rank pools aliasDict tipe =
             IO.return v
 
         Type.AppN home name args ->
-            IO.do (traverse go args) <| \argVars ->
+            IO.do (IO.list_foldl go args) <| \argVars ->
             register rank pools (Structure (App1 home name argVars))
 
         Type.FunN a b ->
@@ -244,7 +244,7 @@ typeToVar rank pools aliasDict tipe =
             register rank pools (Structure (Fun1 aVar bVar))
 
         Type.AliasN home name args aliasType ->
-            IO.do (traverse (traverse go) args) <| \argVars ->
+            IO.do (IO.list_foldl (traverse go) args) <| \argVars ->
             IO.do (typeToVar rank pools (Dict.fromList argVars) aliasType) <| \aliasVar ->
             register rank pools (Alias home name argVars aliasVar)
 
@@ -252,21 +252,25 @@ typeToVar rank pools aliasDict tipe =
             IO.return (aliasDict ! name)
 
         Type.RecordN fields ext ->
-            IO.do (traverse go fields) <| \fieldVars ->
+            IO.do (IO.dict_foldl go fields) <| \fieldVars ->
             IO.do (go ext) <| \extVar ->
             register rank pools (Structure (Record1 fieldVars extVar))
 
-        Type.EmptyRecordN ->
-            register rank pools emptyRecord1
 
-        Type.UnitN ->
-            register rank pools unit1
 
-        Type.TupleN a b c ->
-            IO.do (go a) <| \aVar ->
-            IO.do (go b) <| \bVar ->
-            IO.do (traverse go c) <| \cVar ->
-            register rank pools (Structure (Tuple1 aVar bVar cVar))
+{-
+   Type.EmptyRecordN ->
+       register rank pools emptyRecord1
+
+   Type.UnitN ->
+       register rank pools unit1
+
+   Type.TupleN a b c ->
+       IO.do (go a) <| \aVar ->
+       IO.do (go b) <| \bVar ->
+       IO.do (traverse go c) <| \cVar ->
+       register rank pools (Structure (Tuple1 aVar bVar cVar))
+-}
 
 
 expectedToVariable : Int -> Type.Pools -> Expected Type -> IO Type.Variable
@@ -383,3 +387,28 @@ poolToRankTable youngMark youngRank youngInhabitants =
     in
     IO.do (IO.list_for youngInhabitants xxxx) <| \_ ->
     Vector.unsafeFreeze mutableTable
+
+
+{-| Check that a variable has rank == noRank, meaning that it can be generalized.
+-}
+isGeneric : Variable -> IO ()
+isGeneric var =
+    IO.do (UF.get var) <| \descriptor ->
+    if descriptor.rank == noRank then
+        return ()
+
+    else
+        IO.do (Type.toErrorType var) <| \tipe ->
+        Debug.todo <|
+            "You ran into a compiler bug. Here are some details for the developers:\n\n"
+                ++ "    "
+                ++ Debug.toString {- (ET.toDoc L.empty RT.None tipe) -} tipe
+                ++ " [rank = "
+                ++ Debug.toString rank
+                ++ "]\n\n"
+                ++ "Please create an <http://sscce.org/> and then report it\n\\n                  \u{0007}t <https://github.com/elm/compiler/issues>\n\n"
+
+
+addError : Error -> Acc -> Acc
+addError err acc =
+    { acc | errors = err :: errors }

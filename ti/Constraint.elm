@@ -95,3 +95,25 @@ exists flexVars constraint =
         , headerCon = constraint
         , bodyCon = True_
         }
+
+
+ptypeReplace : PatternExpected a -> b -> PatternExpected b
+ptypeReplace expectation ty =
+    case expectation of
+        PatternExpected_NoExpectation _ ->
+            PatternExpected_NoExpectation ty
+
+        PatternExpected_FromContext pos context _ ->
+            PatternExpected_FromContext pos context ty
+
+
+typeReplace : Expected a -> b -> Expected b
+typeReplace expectation ty =
+    case expectation of
+        Expected_NoExpectation _ ->
+            Expected_NoExpectation ty
+
+        --     Expected_FromAnnotation name arity context _ ->
+        --       Expected_FromAnnotation name arity context tipe
+        Expected_FromContext region context _ ->
+            Expected_FromContext region context ty
