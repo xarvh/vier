@@ -1,6 +1,5 @@
 module Solve exposing (..)
 
-import Unify
 import Array exposing (Array)
 import CanonicalAst as CA exposing (Name, Pos)
 import Constraint exposing (Constraint, Expected)
@@ -8,6 +7,7 @@ import Dict exposing (Dict)
 import Error
 import IO
 import Type exposing (IO, Type)
+import Unify
 
 
 
@@ -107,10 +107,10 @@ solve env rank pools constraint acc =
                     IO.do (introduce rank pools vars) <| \_ ->
                     IO.return <|
                         addError acc <|
-                            Error.BadExpr region (Error.Local name) actualType <|
+                            Error.BadExpr region (Constraint.Category_Local name) actualType <|
                                 Constraint.typeReplace expectation expectedType
 
-        Constraint.Foreign region name (CA.Forall freeVars srcType) expectation ->
+        Constraint.Foreign region name (CA.Annotation freeVars srcType) expectation ->
             IO.do (srcTypeToVariable rank pools freeVars srcType) <| \actual ->
             IO.do (expectedToVariable rank pools expectation) <| \expected ->
             IO.do (Unify.unify actual expected) <| \answer ->
@@ -122,7 +122,7 @@ solve env rank pools constraint acc =
                 Err ( vars, actualType, expectedType ) ->
                     IO.do (introduce rank pools vars) <| \_ ->
                     Constraint.typeReplace expectation expectedType
-                        |> Error.BadExpr region (Error.Foreign name) actualType
+                        |> Error.BadExpr region (Constraint.Category_Foreign name) actualType
                         |> IO.return
                         |> addError acc
 
@@ -412,3 +412,24 @@ isGeneric var =
 addError : Error -> Acc -> Acc
 addError err acc =
     { acc | errors = err :: errors }
+
+
+srcTypeToVariable : Int -> Type.Pools -> Set Name -> CA.Type -> IO Type.Variable
+srcTypeToVariable rank pools freeVars srcType =
+    {-
+       let
+         nameToContent name
+           | Name.isNumberType     name = FlexSuper Number (Just name)
+           | Name.isComparableType name = FlexSuper Comparable (Just name)
+           | Name.isAppendableType name = FlexSuper Appendable (Just name)
+           | Name.isCompappendType name = FlexSuper CompAppend (Just name)
+           | otherwise                  = FlexVar (Just name)
+
+         makeVar name _ =
+           UF.fresh (Descriptor (nameToContent name) rank noMark Nothing)
+       in
+       do  flexVars <- Map.traverseWithKey makeVar freeVars
+           MVector.modify pools (Map.elems flexVars ++) rank
+           srcTypeToVar rank pools flexVars srcType
+    -}
+    Debug.todo "srcTypeToVariable"

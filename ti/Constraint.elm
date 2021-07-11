@@ -18,6 +18,8 @@ type Category
     | Category_List
     | Category_Lambda
     | Category_Record
+    | Category_Local Name
+    | Category_Foreign Name
 
 
 type Expected ty
